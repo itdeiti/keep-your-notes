@@ -1,0 +1,26 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_task"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="4dp">
+
+    <TextView
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:paddingStart="16dp"
+        android:text="Aufgabe …"
+        android:textColor="@color/widget_fg"
+        android:textSize="16sp" />
+
+    <TextView
+        android:layout_width="48dp"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:text="⏰"
+        android:textSize="20sp" />
+</LinearLayout>

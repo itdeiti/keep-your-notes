@@ -44,7 +44,7 @@ object Markdown {
         K.LINK to Regex("""\[([^\]]+)\]\(([^)\s]+)\)"""),
         K.WIKI to Regex("""\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"""),
         K.TAG to Regex("""(?<![\w#&/])#([\p{L}_][\p{L}\d_/-]*)"""),
-        K.META to Regex("""(📅|⏰|✅) ?(\d{4}-\d{2}-\d{2}(?: \d{1,2}:\d{2})?)"""),
+        K.META to Regex("""(📅|⏰|✅) ?(\d{4}-\d{2}-\d{2}(?: \d{1,2}:\d{2})?)|🔁 ?[A-Za-z0-9][A-Za-z0-9, ]*[A-Za-z0-9]"""),
     )
     private val TAG_RE = RULES.first { it.first == K.TAG }.second
 
@@ -62,7 +62,7 @@ object Markdown {
 
     fun tags(text: String): Set<String> = TAG_RE.findAll(text).map { it.groupValues[1] }.toSet()
 
-    fun stripTaskMeta(s: String) = s.replace(META_STRIP, "").trim()
+    fun stripTaskMeta(s: String) = s.replace(META_STRIP, "").replace(Recurrence.RULE, "").replace(Regex(""" {2,}"""), " ").trim()
 
     /** Earliest due date of an open task. */
     fun nextDue(body: String): LocalDate? = body.lineSequence()
@@ -314,13 +314,49 @@ object Markdown {
     }
 
     /** Tick or untick task in line [i]; ticking adds "✅ date" like the Tasks plugin. */
-    fun toggleTaskLine(text: String, i: Int): String {
+    fun toggleTaskLine(text: String, i: Int, today: LocalDate = LocalDate.now()): String {
         val lines = text.split("\n").toMutableList()
         val l = lines.getOrNull(i) ?: return text
         val m = TASK.find(l) ?: return text
-        lines[i] = if (m.groupValues[2] == " ") l.replaceFirst("[ ]", "[x]") + " ✅ ${LocalDate.now()}"
-        else l.replaceFirst(Regex("""\[[xX]\]"""), "[ ]").replace(Regex("""\s*✅ ?\d{4}-\d{2}-\d{2}"""), "")
+        if (m.groupValues[2] == " ") {
+            lines[i] = l.replaceFirst("[ ]", "[x]") + " ✅ $today"
+            // recurring (🔁): next occurrence goes above the ticked one, like the Tasks plugin
+            Recurrence.nextLine(l, today)?.let { lines.add(i, it) }
+        } else {
+            val open = l.replaceFirst(Regex("""\[[xX]\]"""), "[ ]").replace(Regex("""\s*✅ ?\d{4}-\d{2}-\d{2}"""), "")
+            lines[i] = open
+            // undo of a tick: drop the occurrence it just created
+            val next = Recurrence.nextLine(open, today)
+            if (next != null && i > 0 && lines[i - 1] == next) lines.removeAt(i - 1)
+        }
         return lines.joinToString("\n")
+    }
+
+    /**
+     * Set or remove (rule = null) the 🔁 rule on the current line, making it a task.
+     * A task without any date gets 📅 today, so the next occurrence has a date to move.
+     */
+    fun setRecurrence(v: TextFieldValue, rule: String?, today: LocalDate = LocalDate.now()): TextFieldValue {
+        val t = v.text
+        val ls = lineStart(t, v.selection.min)
+        val le = lineEnd(t, ls)
+        val raw = t.substring(ls, le)
+        val task = Regex("""^(\s*[-*+] \[( |x|X)\])\s?""").find(raw)
+        val list = if (task == null) LIST.find(raw) else null
+        val prefix = when {
+            task != null -> task.groupValues[1] + " "
+            list != null -> list.groupValues[1] + "- [ ] "
+            else -> "- [ ] "
+        }
+        var rest = raw.substring(task?.value?.length ?: list?.value?.length ?: 0)
+            .replace(Regex("""\s*""" + Recurrence.RULE.pattern), "").trimEnd()
+        if (rule != null) {
+            if (!Regex("""(📅|⏳|🛫|⏰) ?\d{4}-\d{2}-\d{2}""").containsMatchIn(rest)) rest += " 📅 $today"
+            rest += " 🔁 $rule"
+        }
+        val line = prefix + rest.trimStart()
+        val cursor = ls + (v.selection.min - ls).coerceIn(prefix.length, line.length)
+        return TextFieldValue(t.substring(0, ls) + line + t.substring(le), TextRange(cursor))
     }
 }
 

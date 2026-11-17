@@ -50,6 +50,7 @@ private fun Theme(content: @Composable () -> Unit) {
 private fun App(vm: AppVM) {
     when (vm.screen) {
         Screen.List -> ListScreen(vm)
+        Screen.Tasks -> TasksScreen(vm)
         Screen.Edit -> EditorScreen(vm)
         Screen.Settings -> SettingsScreen(vm)
     }

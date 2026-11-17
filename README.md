@@ -2,12 +2,15 @@
 
 Small Android app that replaces Google Keep and keeps every note as a Markdown file in an Obsidian vault, synced with Git.
 
-- Widgets: "Schnellnotiz" (quick note, checklist, dictation) and "Notizliste" (Keep-style list of notes, pinned first; tap a checkbox to tick it without opening the app, tap text to edit the note).
+- Widgets: "Schnellnotiz" (quick note, checklist, dictation), "Aufgabe" (quick task with reminder, see below) and "Notizliste" (Keep-style list of notes, pinned first; tap a checkbox to tick it without opening the app, tap text to edit the note).
 - List of the whole vault, newest first, pinned on top, search and tag filter: tag chips, "Tags…" opens a searchable tag list with counts, `#ko` in the search field filters by tags containing "ko".
 - Editor with Markdown highlighting, toolbar, list continuation, read view with tappable checkboxes.
 - Tasks with due date and reminder in the Obsidian Tasks/Reminder format:
   `- [ ] Zahnarzt anrufen 📅 2026-11-20 ⏰ 2026-11-20 09:00`
   A task with only `📅` reminds at the default time (09:00, configurable). "Erledigt" in the notification ticks the task (`✅ date`), commits and pushes.
+- Recurring tasks in the Obsidian Tasks format: `- [ ] Müll raus 📅 2026-11-24 ⏰ 2026-11-24 07:00 🔁 every week`. Ticking one (in the editor, overview, widget or notification) adds the next occurrence above it with all dates (`📅 ⏳ 🛫 ⏰`) moved; unticking right after removes it again. Rules: `every [N] day(s)/week(s)/month(s)/year(s)`, `every weekday`, `every monday, friday`, `every 2 weeks on monday`, each optionally with `when done` (counts from the day it was ticked). 🔁 in the editor toolbar sets the rule for the current line (adds `📅` today if the task has no date).
+- Quick task widget "Aufgabe": tap, type the task, then "Heute" / "Morgen" / "Datum …" and the reminder time (or "Ohne Uhrzeit" = default time, "Ohne Datum" = plain task). The task is appended to `Aufgaben.md` in the vault root (outside `inbox/`, so the evening sorting leaves it alone), committed and synced; the reminder is set right away.
+- Task overview: ☑ in the list shows every open task of the vault grouped as "Überfällig", "Heute", "Nächste 7 Tage", "Später" and "Ohne Datum" (collapsed). The date comes from `📅`, else `⏳`, else `⏰`; tasks in code blocks are skipped. Tick a task right there (struck through until you leave the screen, tap again to undo); tap the text to open the note, back returns to the overview.
 - Web clipping into `Clippings/` (with `source:` in the frontmatter, like the Obsidian Web Clipper):
   - Share a page from the browser → the app downloads it, keeps the article (Readability, Firefox reader mode) and converts it to Markdown: headings, lists, links, quotes, code, tables, images as remote links.
   - Select text, then "Teilen" in Chrome → quote plus link back to the highlighted passage.
@@ -157,7 +160,7 @@ The same script imported the old Zettelkasten (`copy` -> `topics` -> `sort` -> `
 ## Development
 
 ```bash
-./gradlew testDebugUnitTest   # Markdown helpers, clipping, git merge/conflict tests against a local bare repo
+./gradlew testDebugUnitTest   # Markdown helpers, task overview, clipping, git merge/conflict tests against a local bare repo
 ./gradlew assembleDebug
 ```
 
@@ -170,5 +173,8 @@ Stack: Kotlin, Jetpack Compose, JGit 5.13 (last Java 8 line, runs on Android), W
 | `Clipper.kt` | share parsing, page download, HTML → Markdown |
 | `Markdown.kt` | highlighting, rendering, editing helpers |
 | `Reminders.kt` | scanning tasks, alarms, notification, "Erledigt" |
+| `Tasks.kt` | open tasks of the vault, grouped by due date (overview screen) |
+| `Recurrence.kt` | 🔁 rules, next occurrence |
+| `QuickTask.kt` | "Aufgabe" widget and its dialog |
 | `Background.kt` | app start, sync worker, widget |
 | `AppVM.kt`, `Screens.kt` | UI state and screens |

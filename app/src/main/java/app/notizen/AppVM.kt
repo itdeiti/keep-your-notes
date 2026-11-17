@@ -13,10 +13,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
-enum class Screen { List, Edit, Settings }
+enum class Screen { List, Tasks, Edit, Settings }
 
 class AppVM(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
@@ -44,6 +46,13 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     private var edSaved = ""
 
     val edPinned get() = isPinned(edFront)
+
+    /** Where the editor goes back to. */
+    private var returnTo = Screen.List
+
+    // tasks screen: ticked here, kept visible (struck through) until the screen is left
+    var justDone by mutableStateOf(mapOf<String, Tasks.Item>())
+    private val taskLock = Mutex()
 
     init {
         if (!ready()) screen = Screen.Settings
@@ -106,6 +115,26 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun showTasks() {
+        justDone = emptyMap()
+        screen = Screen.Tasks
+    }
+
+    /** Open tasks (minus the ones just ticked) plus the ticked ones, so a tick can be undone. */
+    fun taskItems(): List<Tasks.Item> = Tasks.open(notes).filter { it.key !in justDone } + justDone.values
+
+    /** Tick an open task or untick one ticked on this screen; writes, commits, syncs later. */
+    fun toggleTask(item: Tasks.Item) {
+        if (item.done) justDone = justDone.filterValues { it != item }
+        else justDone = justDone + (item.key to item.copy(line = Tasks.toggled(item.line), done = true))
+        viewModelScope.launch {
+            taskLock.withLock { withContext(Dispatchers.IO) { Reminders.toggle(ctx, item.path, item.line) } }
+            reload()
+        }
+    }
+
+    fun openTask(item: Tasks.Item) = openPath(item.path)
+
     fun onResume() {
         tick++
         if (ready() && screen != Screen.Edit) sync()
@@ -156,6 +185,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     fun open(n: Note, edit: Boolean = false) {
         saveEditor()
+        if (screen != Screen.Edit) returnTo = if (screen == Screen.Tasks) Screen.Tasks else Screen.List
         edPath = n.path
         edTitle = n.title
         edFront = n.front
@@ -175,6 +205,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     fun newNote(kind: String, text: String = "", title: String = "", folder: String = "inbox", front: List<String> = emptyList()) {
         saveEditor()
+        if (screen != Screen.Edit) returnTo = Screen.List
         edPath = null
         edTitle = title
         edFolder = folder
@@ -258,14 +289,14 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     fun closeEditor() {
         saveEditor()
-        screen = Screen.List
+        screen = returnTo
         reload()
     }
 
     fun deleteNote() {
         val path = edPath
         edPath = null; edTitle = ""; edBody = TextFieldValue("")
-        screen = Screen.List
+        screen = returnTo
         if (path != null) {
             File(Vault.dir(ctx), path).delete()
             viewModelScope.launch {

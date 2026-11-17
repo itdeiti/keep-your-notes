@@ -21,6 +21,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -30,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -104,6 +112,7 @@ import androidx.core.content.ContextCompat
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun mdColors(): MdColors {
@@ -131,6 +140,7 @@ fun ListScreen(vm: AppVM) {
             TopAppBar(
                 title = { Text("Notizen") },
                 actions = {
+                    TextButton(onClick = { vm.showTasks() }) { Text("☑", style = MaterialTheme.typography.titleMedium) }
                     TextButton(onClick = { showFolders = true }) { Text("📁", style = MaterialTheme.typography.titleMedium) }
                     if (vm.busy) CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
                     else IconButton(onClick = { vm.sync() }) { Icon(Icons.Default.Refresh, "Synchronisieren") }
@@ -216,6 +226,88 @@ private fun NoteCard(n: Note, c: MdColors, onClick: () -> Unit) {
     }
 }
 
+// ---------------- tasks ----------------
+
+/** All open tasks of the vault: overdue, today, next 7 days, later, without date. */
+@Composable
+fun TasksScreen(vm: AppVM) {
+    BackHandler { vm.screen = Screen.List }
+    val today = LocalDate.now()
+    val groups = remember(vm.notes, vm.justDone, today) { Tasks.grouped(vm.taskItems(), today) }
+    var showNoDate by rememberSaveable { mutableStateOf(false) }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Aufgaben") },
+                navigationIcon = {
+                    IconButton({ vm.screen = Screen.List }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") }
+                },
+                actions = {
+                    if (vm.busy) CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
+                    else IconButton(onClick = { vm.sync() }) { Icon(Icons.Default.Refresh, "Synchronisieren") }
+                },
+            )
+        },
+    ) { pad ->
+        if (groups.isEmpty()) {
+            Text(
+                "Keine offenen Aufgaben.", color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(pad).padding(24.dp),
+            )
+            return@Scaffold
+        }
+        LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(bottom = 48.dp)) {
+            for ((g, list) in groups) {
+                val folded = g == Tasks.Group.NoDate && !showNoDate
+                item(key = "h-" + g.name) {
+                    val head = "${g.label} (${list.size})" + if (g == Tasks.Group.NoDate) (if (folded) "  ▸" else "  ▾") else ""
+                    Text(
+                        head, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                        color = if (g == Tasks.Group.Overdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.fillMaxWidth()
+                            .let { if (g == Tasks.Group.NoDate) it.clickable { showNoDate = !showNoDate } else it }
+                            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+                    )
+                }
+                if (!folded) items(list, key = { "t-" + it.key }) { t ->
+                    TaskRow(t, g, onToggle = { vm.toggleTask(t) }, onOpen = { vm.openTask(t) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskRow(t: Tasks.Item, g: Tasks.Group, onToggle: () -> Unit, onOpen: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = t.done, onCheckedChange = { onToggle() })
+        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            Text(
+                t.text, style = MaterialTheme.typography.bodyLarge,
+                textDecoration = if (t.done) TextDecoration.LineThrough else null,
+                color = if (t.done) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                maxLines = 3, overflow = TextOverflow.Ellipsis,
+            )
+            val date = when {
+                t.date == null -> null
+                g == Tasks.Group.Today -> t.time
+                else -> t.date.format(
+                    DateTimeFormatter.ofPattern(if (t.date.year == LocalDate.now().year) "EE d.M." else "EE d.M.yyyy", Locale.GERMAN),
+                ) + (t.time?.let { " $it" } ?: "")
+            }
+            Text(
+                listOfNotNull(date, t.recur?.let { "🔁 $it" }, titleOf(t.path)).joinToString("  ·  "),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (g == Tasks.Group.Overdue && !t.done) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
 // ---------------- editor ----------------
 
 @Composable
@@ -224,6 +316,8 @@ fun EditorScreen(vm: AppVM) {
     val c = mdColors()
     val focus = remember { FocusRequester() }
     var confirmDelete by remember { mutableStateOf(false) }
+    var pickRecur by remember { mutableStateOf(false) }
+    if (pickRecur) RecurDialog(onPick = { vm.edBody = Markdown.setRecurrence(vm.edBody, it); pickRecur = false }) { pickRecur = false }
     BackHandler { vm.closeEditor() }
 
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -288,7 +382,23 @@ fun EditorScreen(vm: AppVM) {
         },
     ) { pad ->
         Column(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().fillMaxSize()) {
-            val onSurface = MaterialTheme.colorScheme.onSurface
+          val onSurface = MaterialTheme.colorScheme.onSurface
+          // Title, properties and text scroll as one page, so the header moves out of the way while writing
+          // and the cursor can always be brought above the keyboard.
+          val scroll = rememberScrollState()
+          var bodyLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+          var bodyFocused by remember { mutableStateOf(false) }
+          val cursorView = remember { BringIntoViewRequester() }
+          val imeBottom = WindowInsets.ime.getBottom(LocalDensity.current)
+          val lineGap = with(LocalDensity.current) { 32.dp.toPx() }
+          LaunchedEffect(vm.edBody.selection, vm.edBody.text, imeBottom, bodyFocused, bodyLayout) {
+              val layout = bodyLayout ?: return@LaunchedEffect
+              if (!bodyFocused) return@LaunchedEffect
+              val pos = vm.edBody.selection.end.coerceIn(0, layout.layoutInput.text.length)
+              val r = layout.getCursorRect(pos)
+              cursorView.bringIntoView(Rect(r.left, r.top - lineGap, r.right, r.bottom + lineGap))
+          }
+          Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(scroll)) {
             BasicTextField(
                 value = vm.edTitle, onValueChange = { vm.edTitle = it.replace("\n", "") },
                 textStyle = MaterialTheme.typography.titleLarge.copy(color = onSurface),
@@ -306,15 +416,13 @@ fun EditorScreen(vm: AppVM) {
             PropsSection(vm)
             TagRow(vm)
             if (vm.clipping) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
-            Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (vm.edPreview) {
                     MarkdownView(
                         vm.edBody.text, c,
                         onToggle = { vm.toggleTask(it) },
                         onEdit = { vm.editAt(it) },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)
                             .clickable { vm.editAt(null) }
-                            .verticalScroll(rememberScrollState())
                             .padding(16.dp),
                     )
                 } else {
@@ -326,7 +434,12 @@ fun EditorScreen(vm: AppVM) {
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         visualTransformation = transform,
-                        modifier = Modifier.fillMaxSize().focusRequester(focus).padding(horizontal = 16.dp),
+                        onTextLayout = { bodyLayout = it },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)
+                            .bringIntoViewRequester(cursorView)
+                            .focusRequester(focus)
+                            .onFocusChanged { bodyFocused = it.isFocused }
+                            .padding(start = 16.dp, end = 16.dp, bottom = 48.dp),
                         decorationBox = { inner ->
                             Box {
                                 if (vm.edBody.text.isEmpty()) Text("Notiz", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.outline)
@@ -335,13 +448,14 @@ fun EditorScreen(vm: AppVM) {
                         },
                     )
                 }
-            }
+          }
             if (!vm.edPreview) Surface(tonalElevation = 3.dp) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
                     Tool("☑") { vm.edBody = Markdown.toggleTask(vm.edBody) }
                     Tool("⇥") { vm.edBody = Markdown.indent(vm.edBody) }
                     Tool("⇤") { vm.edBody = Markdown.indent(vm.edBody, outdent = true) }
                     Tool("📅") { pickDue() }
+                    Tool("🔁") { pickRecur = true }
                     Tool("🎤") { dictate() }
                     Tool("B", bold = true) { vm.edBody = Markdown.wrap(vm.edBody, "**") }
                     Tool("I", italic = true) { vm.edBody = Markdown.wrap(vm.edBody, "*") }
@@ -354,6 +468,34 @@ fun EditorScreen(vm: AppVM) {
             }
         }
     }
+}
+
+/** Repeat rule for the task in the current line (Tasks plugin syntax, German labels). */
+@Composable
+private fun RecurDialog(onPick: (String?) -> Unit, onDismiss: () -> Unit) {
+    var whenDone by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wiederholen") },
+        text = {
+            Column {
+                for (r in Recurrence.CHOICES) {
+                    val rule = r + if (whenDone) " when done" else ""
+                    Text(
+                        Recurrence.parse(r)!!.label(),
+                        Modifier.fillMaxWidth().clickable { onPick(rule) }.padding(vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                Row(Modifier.fillMaxWidth().clickable { whenDone = !whenDone }, verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = whenDone, onCheckedChange = { whenDone = it })
+                    Text("ab Erledigung zählen", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+        dismissButton = { TextButton(onClick = { onPick(null) }) { Text("Nicht wiederholen") } },
+    )
 }
 
 /** Opens a date picker; writes YYYY-MM-DD and keeps a time part that was already there (created: ...T14:32). */
