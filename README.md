@@ -58,6 +58,10 @@ Add the widget from the home screen widget list ("Schnellnotiz").
 
 Optional: in Obsidian Android, "Open folder as vault" → `Documents/Vault`. Do **not** install the Git plugin there; the app does the syncing.
 
+## Note method
+
+The vault follows PARA (Tiago Forte): `projekte/`, `bereiche/`, `wissen/` (Resources), `archiv/`, plus `inbox/` as entry point and a fixed tag list for topics. Daily use, weekly review and how to extend it are described in the vault itself: `Notiz-Methode.md` (pinned, readable in the app).
+
 ## Nightly inbox sorting (Mac, local AI)
 
 Every evening the Mac sorts new notes from `inbox/` into the vault folders and tags them. Everything runs locally; note content never leaves the machine.
