@@ -7,6 +7,7 @@ that only the user opens.
 
   python3 vault_import.py copy   SRC_VAULT DEST_VAULT  # steps 1+2: copy and clean into DEST/_import/
   python3 vault_import.py topics DEST_VAULT [K]        # step 3: group notes by meaning, name groups -> tag-vorschlag.md, regeln.md
+  python3 vault_import.py sort   DEST_VAULT            # step 5: folder + tags per note from regeln.md -> vorschau.csv
 
 Local models via Ollama (http://localhost:11434): bge-m3 for embeddings, qwen2.5:32b for naming/sorting.
 """
@@ -400,9 +401,105 @@ Diese Datei steuert Schritt 5. Aendern, streichen, umbenennen erlaubt; Format be
     return 0
 
 
+# ---------------- step 5: sort ----------------
+
+def read_rules(stage):
+    text = open(os.path.join(stage, "regeln.md"), encoding="utf-8").read()
+    folders, tags, section = [], [], None
+    for l in text.split("\n"):
+        if l.startswith("## "):
+            h = l[3:].lower()
+            section = "ordner" if h.startswith("ordner") else "tags" if h.startswith("tags") else None
+            continue
+        m = re.match(r"^- ([^:]+):", l)
+        if m and section == "ordner":
+            folders.append(m.group(1).strip().lower())
+        elif m and section == "tags":
+            tags.append(m.group(1).strip().lower().lstrip("#"))
+    return text, folders, tags
+
+
+OPEN_TASK = re.compile(r"^\s*[-*+] \[ \]", re.M)
+
+
+def cmd_sort(dest):
+    stage = os.path.join(os.path.abspath(os.path.expanduser(dest)), "_import")
+    rules, folders, tags = read_rules(stage)
+    mapping, notes = load_notes(stage)
+    unsure = {m["ziel"] for m in mapping if m.get("datum_unsicher")}
+    two_years_ago = datetime.now().replace(year=datetime.now().year - 2).strftime("%Y-%m-%d")
+    res_path = os.path.join(stage, "klassifikation.json")
+    results = json.load(open(res_path, encoding="utf-8")) if os.path.exists(res_path) else {}
+    print("ordner", len(folders), "tags", len(tags), "schon_erledigt", len(results))
+
+    for i, n in enumerate(notes):
+        if n["ziel"] in results:
+            continue
+        has_open = bool(OPEN_TASK.search(n["body"]))
+        old_tags = [l for l in n["front"] if l.startswith("tags:") or l.strip().startswith("- ")]
+        datum = "unbekannt" if n["ziel"] in unsure else n["m"]["created"]
+        prompt = (
+            rules + "\n\n---\nOrdne diese Notiz nach den Regeln oben ein.\n"
+            "TITEL: %s\nERSTELLT: %s\nOFFENE AUFGABEN: %s\nALTE TAGS: %s\nTEXT:\n%s\n\n"
+            "Waehle genau einen Ordner aus: %s.\nWaehle 1 bis 3 Tags nur aus: %s.\n"
+            'Antworte nur als JSON: {"ordner": "...", "tags": ["..."], "begruendung": "hoechstens 12 Woerter"}'
+        ) % (n["titel"], datum, "ja" if has_open else "nein", " ".join(old_tags)[:200], n["body"][:3000],
+             ", ".join(folders), ", ".join(tags))
+        try:
+            r = ask_json(prompt)
+            folder = str(r.get("ordner", "")).strip().lower()
+            if folder not in folders:
+                stats["ordner_ungueltig"] += 1
+                folder = "inbox"
+            raw = r.get("tags", [])
+            raw = raw if isinstance(raw, list) else [raw]
+            picked = []
+            for t in raw:
+                t = str(t).strip().lower().lstrip("#")
+                if t in tags and t not in picked:
+                    picked.append(t)
+                else:
+                    stats["tag_verworfen"] += 1
+            why = str(r.get("begruendung", "")).strip()
+        except Exception as e:
+            stats["fehler_" + type(e).__name__] += 1
+            folder, picked, why = "inbox", [], "Fehler bei der Einordnung"
+        # hard archive rule for reliable dates
+        if (n["ziel"] not in unsure and n["m"]["created"] < two_years_ago and not has_open
+                and folder != "archiv" and "archiv" in folders):
+            folder, why = "archiv", "Regel: aelter als 2 Jahre, keine offene Aufgabe. " + why
+            stats["archiv_per_regel"] += 1
+        results[n["ziel"]] = {"ordner": folder, "tags": picked[:3], "begruendung": why}
+        if (i + 1) % 10 == 0:
+            json.dump(results, open(res_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+            print("fortschritt", len(results), "/", len(notes), flush=True)
+    json.dump(results, open(res_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+
+    import csv
+    with open(os.path.join(stage, "vorschau.csv"), "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(["datei", "erstellt", "datum_unsicher", "ordner", "tags", "begruendung"])
+        for n in notes:
+            r = results[n["ziel"]]
+            w.writerow([n["ziel"], n["m"]["created"], "ja" if n["ziel"] in unsure else "",
+                        r["ordner"], " ".join(r["tags"]), r["begruendung"]])
+
+    per_folder = Counter(r["ordner"] for r in results.values())
+    per_tagcount = Counter(len(r["tags"]) for r in results.values())
+    print("== pro ordner ==")
+    for f_ in folders:
+        print("%-12s %d" % (f_, per_folder[f_]))
+    print("tags_pro_notiz", dict(sorted(per_tagcount.items())))
+    print("tags_genutzt", len({t for r in results.values() for t in r["tags"]}), "von", len(tags))
+    for k in sorted(stats):
+        print(k, stats[k])
+    return 0
+
+
 if __name__ == "__main__":
     cmds = {"copy": lambda: cmd_copy(sys.argv[2], sys.argv[3]),
-            "topics": lambda: cmd_topics(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 18)}
+            "topics": lambda: cmd_topics(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 18),
+            "sort": lambda: cmd_sort(sys.argv[2])}
     if len(sys.argv) >= 3 and sys.argv[1] in cmds:
         try:
             sys.exit(cmds[sys.argv[1]]())
