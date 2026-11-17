@@ -113,10 +113,13 @@ fun mdColors(): MdColors {
 fun ListScreen(vm: AppVM) {
     val c = mdColors()
     val notes = vm.filtered()
-    val tags = remember(vm.notes) {
-        vm.notes.flatMap { it.tags }.groupingBy { it }.eachCount().entries
-            .sortedByDescending { it.value }.map { it.key }
-    }
+    val counts = remember(vm.notes) { vm.tagCounts() }
+    val tq = vm.tagQuery
+    val tags = counts.map { it.first }
+        .filter { tq.isNullOrEmpty() || it.contains(tq) }
+        .let { l -> vm.tag?.let { sel -> listOf(sel) + (l - sel) } ?: l }
+    var pickTag by remember { mutableStateOf(false) }
+    if (pickTag) TagFilterPicker(counts, onPick = { vm.tag = it; vm.query = ""; pickTag = false }) { pickTag = false }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -136,15 +139,16 @@ fun ListScreen(vm: AppVM) {
             OutlinedTextField(
                 value = vm.query, onValueChange = { vm.query = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                placeholder = { Text("Suchen") },
+                placeholder = { Text("Suchen, #tag für Tags") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true, shape = RoundedCornerShape(28.dp),
             )
-            if (tags.isNotEmpty()) LazyRow(
+            if (counts.isNotEmpty()) LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(tags) { t ->
+                item { AssistChip(onClick = { pickTag = true }, label = { Text("Tags…") }) }
+                items(tags, key = { it }) { t ->
                     FilterChip(
                         selected = vm.tag == t,
                         onClick = { vm.tag = if (vm.tag == t) null else t },
@@ -332,6 +336,41 @@ fun EditorScreen(vm: AppVM) {
             }
         }
     }
+}
+
+/** Searchable list of all tags with counts; tap filters the note list. */
+@Composable
+private fun TagFilterPicker(counts: List<Pair<String, Int>>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val q = cleanTag(query)
+    val shown = counts.filter { q.isEmpty() || it.first.contains(q) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nach Tag filtern") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it }, singleLine = true,
+                    placeholder = { Text("Tag suchen") }, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { shown.firstOrNull()?.let { onPick(it.first) } }),
+                )
+                if (shown.isEmpty()) Text("Kein Tag gefunden", Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.outline)
+                LazyColumn(Modifier.heightIn(max = 360.dp)) {
+                    items(shown) { (t, n) ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onPick(t) }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("#$t", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            Text("$n", color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen") } },
+    )
 }
 
 /** Tags of the open note: tap × to remove, ＋ to add an existing or new tag. */

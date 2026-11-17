@@ -52,13 +52,14 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     fun ready() = Prefs.load(ctx).repoUrl.isNotBlank() &&
         Environment.isExternalStorageManager() && GitSync.isCloned(ctx)
 
-    fun filtered(): List<Note> {
-        val q = query.trim()
-        return notes.filter { n ->
-            (tag == null || tag in n.tags) &&
-                (q.isEmpty() || n.title.contains(q, true) || n.body.contains(q, true))
-        }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified })
-    }
+    /** "#ko" in the search field filters by tags containing "ko"; anything else searches title and text. */
+    val tagQuery: String? get() = query.trim().takeIf { it.startsWith("#") }?.let { cleanTag(it) }
+
+    fun filtered(): List<Note> = filterNotes(notes, tag, query)
+
+    /** All tags with how many notes use them, most used first. */
+    fun tagCounts(): List<Pair<String, Int>> = notes.flatMap { it.tags }.groupingBy { it }.eachCount()
+        .entries.sortedByDescending { it.value }.map { it.key to it.value }
 
     fun reload() {
         viewModelScope.launch {

@@ -39,6 +39,18 @@ fun withTags(front: List<String>, tags: List<String>): List<String> {
     return out
 }
 
+/** List filter: selected [tag], plus "#abc" in [query] = tags containing "abc", else full-text search. Pinned first, newest first. */
+fun filterNotes(notes: List<Note>, tag: String?, query: String): List<Note> {
+    val q = query.trim()
+    val tq = q.takeIf { it.startsWith("#") }?.let { cleanTag(it) }
+    return notes.filter { n ->
+        (tag == null || tag in n.tags) && when {
+            tq != null -> tq.isEmpty() || n.tags.any { it.contains(tq) }
+            else -> q.isEmpty() || n.title.contains(q, true) || n.body.contains(q, true)
+        }
+    }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified })
+}
+
 /** "Mein Tag!" -> "mein-tag" */
 fun cleanTag(raw: String) = raw.trim().removePrefix("#").lowercase()
     .replace(Regex("\\s+"), "-").replace(Regex("[^\\p{L}\\d_/-]"), "").trim('-')

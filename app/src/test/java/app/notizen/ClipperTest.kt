@@ -71,3 +71,34 @@ class ClipperTest {
         assertTrue(b.contains("[1](https://blog.example.com/kaffee#fn1)"))
     }
 }
+
+class FilterTest {
+    private fun note(path: String, tags: String, body: String = "x", pinned: Boolean = false, t: Long = 0) =
+        Note(path, listOfNotNull("tags: [$tags]", if (pinned) "pinned: true" else null), body, t)
+
+    private val notes = listOf(
+        note("wissen/Pasta.md", "kochen, rezept", t = 3),
+        note("wissen/Kuchen.md", "kochen", body = "Mehl #backen", t = 2),
+        note("bereiche/Steuer.md", "finanzen", t = 1),
+        note("bereiche/Zahnarzt.md", "gesundheit", pinned = true, t = 0),
+    )
+
+    private fun titles(tag: String?, q: String) = filterNotes(notes, tag, q).map { it.title }
+
+    @Test fun hashSearchMatchesTagsByPart() {
+        assertEquals(listOf("Pasta", "Kuchen"), titles(null, "#ko"))
+        assertEquals(listOf("Kuchen"), titles(null, "#back")) // inline #tag in text counts too
+        assertEquals(emptyList<String>(), titles(null, "#xyz"))
+    }
+
+    @Test fun plainSearchIsFullText() {
+        assertEquals(listOf("Kuchen"), titles(null, "mehl"))
+        assertEquals(listOf("Steuer"), titles(null, "steu"))
+    }
+
+    @Test fun selectedTagAndPinnedFirst() {
+        assertEquals(listOf("Pasta", "Kuchen"), titles("kochen", ""))
+        assertEquals(listOf("Zahnarzt", "Pasta", "Kuchen", "Steuer"), titles(null, ""))
+        assertEquals(listOf("Zahnarzt", "Pasta", "Kuchen", "Steuer"), titles(null, "#"))
+    }
+}
