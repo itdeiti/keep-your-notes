@@ -138,6 +138,24 @@ object Vault {
             .toList()
     }
 
+    private val PARA = listOf("inbox", "projekte", "bereiche", "wissen", "archiv")
+
+    /** All folders below the vault root (no dot folders), PARA folders first, subfolders after their parent. */
+    fun folders(root: File): List<String> {
+        if (!root.isDirectory) return emptyList()
+        val all = root.walkTopDown().onEnter { it == root || !it.name.startsWith(".") }
+            .filter { it.isDirectory && it != root }.map { it.relativeTo(root).path }.toList()
+        return sortFolders(all + PARA.filter { it !in all })
+    }
+
+    fun sortFolders(paths: List<String>): List<String> = paths.distinct().sortedWith(
+        compareBy<String>({ PARA.indexOf(it.substringBefore('/')).let { i -> if (i < 0) PARA.size else i } }, { it.lowercase() })
+    )
+
+    /** "Projekte / Umzug 2027/" -> "Projekte/Umzug 2027"; no dot folders, no "..". */
+    fun cleanFolder(raw: String) = raw.split('/').map { it.trim().replace(Regex("""[\\:*?"<>|]"""), "") }
+        .filter { it.isNotEmpty() && !it.startsWith(".") }.joinToString("/")
+
     fun read(root: File, f: File): Note {
         val (front, body) = parse(f.readText())
         return Note(f.relativeTo(root).path, front, body, f.lastModified())

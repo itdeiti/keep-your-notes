@@ -136,3 +136,24 @@ class PropsTest {
         assertEquals("mein_feld", cleanKey(" mein feld! "))
     }
 }
+
+class FolderTest {
+    @Test fun sortsParaFirstAndCleans() {
+        assertEquals(
+            listOf("inbox", "projekte", "projekte/umzug", "bereiche", "wissen", "archiv", "Clippings", "zeug"),
+            Vault.sortFolders(listOf("zeug", "archiv", "Clippings", "projekte/umzug", "wissen", "inbox", "bereiche", "projekte")),
+        )
+        assertEquals("projekte/Umzug 2027", Vault.cleanFolder(" projekte / Umzug 2027/ "))
+        assertEquals("a/b", Vault.cleanFolder("a/../.git/b"))
+    }
+
+    @Test fun listsRealFolders() {
+        val root = kotlin.io.path.createTempDirectory().toFile()
+        listOf("projekte/umzug", ".git/objects", "wissen", "Clippings").forEach { java.io.File(root, it).mkdirs() }
+        assertEquals(
+            listOf("inbox", "projekte", "projekte/umzug", "bereiche", "wissen", "archiv", "Clippings"),
+            Vault.folders(root),
+        )
+        root.deleteRecursively()
+    }
+}

@@ -39,7 +39,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     var dictateOnOpen by mutableStateOf(false)
     private var clipKey by mutableIntStateOf(-1)
     val clipping get() = clipKey == edKey
-    private var edFolder = "inbox"
+    private var edFolder by mutableStateOf("inbox")
     private var edSaved = ""
 
     val edPinned get() = isPinned(edFront)
@@ -293,6 +293,32 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     fun removeProp(key: String) {
         edFront = withProp(edFront, key, null)
+    }
+
+    /** Folder of the open note ("" = vault root). */
+    val edFolderNow: String get() = edPath?.substringBeforeLast('/', "") ?: edFolder
+
+    fun folders(): List<String> = Vault.folders(Vault.dir(ctx))
+
+    /** Move the open note into [folder] (created if missing), commit and sync. */
+    fun moveTo(folder: String) {
+        val f = Vault.cleanFolder(folder)
+        if (f == edFolderNow) return
+        if (edPath == null) { edFolder = f; return } // not saved yet: will be created there
+        saveEditor()
+        val root = Vault.dir(ctx)
+        val old = edPath ?: return
+        val np = Vault.uniquePath(root, f, titleOf(old))
+        File(root, np).parentFile?.mkdirs()
+        if (!File(root, old).renameTo(File(root, np))) return
+        edPath = np
+        edSaved = snapshot()
+        val msg = "Verschoben: ${titleOf(np)} -> ${f.ifEmpty { "/" }}"
+        viewModelScope.launch {
+            GitSync.commit(ctx, msg)
+            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
+            SyncWorker.enqueue(ctx)
+        }
     }
 
     fun togglePin() {

@@ -12,6 +12,7 @@ Small Android app that replaces Google Keep and keeps every note as a Markdown f
   - Share a page from the browser → the app downloads it, keeps the article (Readability, Firefox reader mode) and converts it to Markdown: headings, lists, links, quotes, code, tables, images as remote links.
   - Select text, then "Teilen" in Chrome → quote plus link back to the highlighted passage.
   - Select text in any app → "Als Notiz" in the selection menu.
+- Move: the folder chip next to "Eigenschaften" (e.g. `📁 projekte`) opens all vault folders (PARA folders first, subfolders indented) or creates a new one like `projekte/umzug-2027`; the move is committed and synced, reminders and widget follow.
 - Properties ("Eigenschaften", collapsed under the title): every frontmatter field except `tags`/`pinned`, editable inline, × removes, "＋ Eigenschaft" adds text or date. Date fields (value starts with YYYY-MM-DD or key like `due`, `datum`, `created`) open a date picker and store `YYYY-MM-DD`; an existing time part (`created: 2026-11-17T14:32`) is kept. New notes get `created:` with date and time.
 - Tags: chips under the title; × removes, ＋ picks an existing tag or creates a new one (`tags: [a, b]` in the frontmatter).
 - Nightly inbox sorting on the Mac (see below).
@@ -33,10 +34,28 @@ New or reset Mac: see [SETUP-MAC.md](SETUP-MAC.md) (tools, SSH, Ollama, LaunchAg
 git clone https://github.com/<name>/vault.git ~/Vault
 ```
 
-Open `~/Vault` as a vault in Obsidian, install the community plugin **Git** (Vinzent03) and set:
+An SSH remote (`git@github.com:<name>/vault.git`, or a host alias as in [SETUP-MAC.md](SETUP-MAC.md)) works as well and is needed for the evening sorting job.
 
-- Auto commit-and-sync interval: 5 minutes
-- Pull on startup: on
+If the SSH key has a passphrase, store it in the macOS keychain first. Obsidian cannot ask for it, so pushes and pulls from the plugin would fail without a visible prompt:
+
+```bash
+ssh-add --apple-use-keychain ~/.ssh/<key>
+```
+
+and add `UseKeychain yes` to the matching `Host` entry in `~/.ssh/config`, so the key is loaded again after a reboot.
+
+Then in Obsidian:
+
+1. "Open folder as vault" → `~/Vault`.
+2. Settings → Community plugins: turn off restricted mode, install and enable **Git** (Vinzent03).
+3. Plugin settings:
+   - Auto commit-and-sync interval: 5 minutes
+   - Pull on startup: on
+4. Test: change a note, run "Git: Commit-and-sync" from the command palette (Cmd+P). No error means it works.
+
+`.obsidian/` (plugins, settings) is committed on purpose; only the workspace files are ignored (see below).
+
+The phone app, the Obsidian plugin and the evening job all pull before they push, so they can run side by side. If Obsidian and another writer change the same lines, the plugin shows a merge conflict; on the phone the app keeps a conflict copy instead.
 
 Optional plugins that understand the same task format: **Tasks** (due lists) and **Reminder** (notifications on the Mac).
 

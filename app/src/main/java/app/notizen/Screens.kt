@@ -354,13 +354,21 @@ private fun PropsSection(vm: AppVM) {
     val ctx = LocalContext.current
     var open by rememberSaveable { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
+    var moving by remember { mutableStateOf(false) }
     val ps = vm.edProps
-    TextButton(onClick = { open = !open }, contentPadding = PaddingValues(horizontal = 16.dp)) {
-        Text(
-            (if (open) "▾ " else "▸ ") + "Eigenschaften" + if (ps.isNotEmpty()) " (${ps.size})" else "",
-            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline,
-        )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = { open = !open }, contentPadding = PaddingValues(horizontal = 16.dp)) {
+            Text(
+                (if (open) "▾ " else "▸ ") + "Eigenschaften" + if (ps.isNotEmpty()) " (${ps.size})" else "",
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline,
+            )
+        }
+        TextButton(onClick = { moving = true }) {
+            Text("📁 " + vm.edFolderNow.ifEmpty { "/" }, style = MaterialTheme.typography.labelLarge,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
+    if (moving) MoveDialog(vm) { moving = false }
     if (!open) return
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         ps.forEach { p ->
@@ -391,6 +399,51 @@ private fun PropsSection(vm: AppVM) {
         TextButton(onClick = { adding = true }) { Text("＋ Eigenschaft") }
     }
     if (adding) AddPropDialog(onAdd = { k, v -> vm.setProp(k, v); adding = false }) { adding = false }
+}
+
+/** Pick a folder (PARA first, subfolders indented) or type a new one like "projekte/umzug-2027". */
+@Composable
+private fun MoveDialog(vm: AppVM, onDone: () -> Unit) {
+    val folders = remember { vm.folders() }
+    var newFolder by remember { mutableStateOf("") }
+    val current = vm.edFolderNow
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("Verschieben nach") },
+        text = {
+            Column {
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    items(folders) { f ->
+                        val depth = f.count { it == '/' }
+                        Row(
+                            Modifier.fillMaxWidth().clickable { vm.moveTo(f); onDone() }
+                                .padding(start = (depth * 20).dp, top = 10.dp, bottom = 10.dp),
+                        ) {
+                            Text(
+                                (if (f == current) "✓ " else "📁 ") + f.substringAfterLast('/'),
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (f == current) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    newFolder, { newFolder = it }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    label = { Text("Neuer Ordner") }, placeholder = { Text("z.B. projekte/umzug-2027") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        if (Vault.cleanFolder(newFolder).isNotEmpty()) { vm.moveTo(newFolder); onDone() }
+                    }),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { vm.moveTo(newFolder); onDone() }, enabled = Vault.cleanFolder(newFolder).isNotEmpty()) {
+                Text("In neuen Ordner")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text("Abbrechen") } },
+    )
 }
 
 @Composable
