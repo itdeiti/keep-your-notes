@@ -60,22 +60,70 @@ Optional: in Obsidian Android, "Open folder as vault" → `Documents/Vault`. Do 
 
 ## Nightly inbox sorting (Mac, local AI)
 
-A LaunchAgent runs every day at 21:00 (`~/Library/LaunchAgents/app.notizen.inbox-sort.plist`):
+Every evening the Mac sorts new notes from `inbox/` into the vault folders and tags them. Everything runs locally; note content never leaves the machine.
 
-```bash
-python3 tools/vault_import.py inbox ~/workspace/personal/notes-vault
+### What a run does
+
+`python3 tools/vault_import.py inbox <vault>`:
+
+1. Commits pending local changes in the vault, then `git pull` (stops with a notification if the pull fails).
+2. For each `inbox/*.md`:
+   - skipped if changed in the last 60 minutes (avoids conflicts with the phone),
+   - skipped if the model already left it in `inbox/` and it has not changed since (`.sortierung/geprueft.json`),
+   - otherwise `qwen2.5:32b` gets `.sortierung/regeln.md` plus the note and answers with one folder and 1–3 tags from the list.
+3. Notes for another folder get `tags: [...]` in the frontmatter (tags set by hand stay) and are moved with `git mv`; name clashes get ` 2`.
+4. Commit `Inbox sortiert: N verschoben`, push, macOS notification. Output and log contain counts only.
+
+### Rules
+
+`<vault>/.sortierung/regeln.md`, plain Markdown, three sections:
+
+```markdown
+## Ordner (genau einer pro Notiz)
+- projekte: hat ein Ziel und ein Ende
+- ...
+## Archiv-Regel
+- ...
+## Tags (1 bis 3 pro Notiz, nur aus dieser Liste)
+- kochen: Rezepte, Einkauf, Essen
+- ...
 ```
 
-It pulls the vault, lets `qwen2.5:32b` (Ollama) pick a folder and 1–3 tags for each note in `inbox/` using `.sortierung/regeln.md`, moves the notes, commits, pushes (SSH remote) and shows a macOS notification. Notes changed in the last hour are skipped; notes the model leaves in `inbox/` are remembered in `.sortierung/geprueft.json` until they change. Tags you set by hand are kept. Log: `~/Library/Logs/notizen-inbox-sort.log`.
+Only lines `- name: description` under `## Ordner` and `## Tags` are parsed; the whole file is passed to the model as instructions. Answers outside the lists are dropped (unknown folder -> stays in `inbox/`).
 
-Run now / pause:
+### Install
+
+Requirements: Ollama with `qwen2.5:32b` running as a service (`brew services start ollama`), the vault cloned with an SSH remote (pushes must not depend on the active `gh` account), Python 3 without extra packages.
 
 ```bash
-launchctl kickstart gui/$(id -u)/app.notizen.inbox-sort
-launchctl bootout gui/$(id -u)/app.notizen.inbox-sort
+sed "s#__HOME__#$HOME#g" tools/app.notizen.inbox-sort.plist > ~/Library/LaunchAgents/app.notizen.inbox-sort.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.notizen.inbox-sort.plist
 ```
 
-The same script imported the old Zettelkasten (`copy`, `topics`, `sort`, `apply`); it never prints note content, only counts.
+The template expects the app repo at `~/workspace/personal/notizen-app` and the vault at `~/workspace/personal/notes-vault`; edit the paths and the time (`StartCalendarInterval`, default 21:00) in the plist if needed. If the Mac sleeps at that time, launchd runs the job after wake-up. Use another model with `VAULT_LLM=...` in the plist's `EnvironmentVariables`.
+
+### Operate
+
+```bash
+launchctl kickstart gui/$(id -u)/app.notizen.inbox-sort      # run now
+tail ~/Library/Logs/notizen-inbox-sort.log                     # last runs (counts only)
+launchctl bootout gui/$(id -u)/app.notizen.inbox-sort        # disable
+```
+
+Undo a run: `git revert` the `Inbox sortiert: ...` commit in the vault.
+
+| Log line | Meaning |
+|---|---|
+| `zu_frisch N` | changed in the last hour, next run |
+| `bleibt_in_inbox N` | model chose `inbox`, remembered until the note changes |
+| `ordner_ungueltig N` | model answered a folder that is not in the rules, note stays |
+| `ollama_nicht_erreichbar` | Ollama not running, nothing changed |
+| `pull_fehlgeschlagen` | merge conflict or no network, nothing changed |
+| `push_fehler 1` | sorted and committed locally, push failed (next run retries) |
+
+### Import of an old vault
+
+The same script imported the old Zettelkasten (`copy` -> `topics` -> `sort` -> `apply`, see the docstring in `tools/vault_import.py`). It never prints note content or file names, only counts; details go to files the user opens.
 
 ## Development
 
