@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -75,6 +76,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -289,6 +291,7 @@ fun EditorScreen(vm: AppVM) {
                     }
                 },
             )
+            PropsSection(vm)
             TagRow(vm)
             if (vm.clipping) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -336,6 +339,89 @@ fun EditorScreen(vm: AppVM) {
             }
         }
     }
+}
+
+/** Opens a date picker; writes YYYY-MM-DD and keeps a time part that was already there (created: ...T14:32). */
+private fun pickDate(ctx: android.content.Context, current: String, onPick: (String) -> Unit) {
+    val d = runCatching { LocalDate.parse(current.take(10)) }.getOrDefault(LocalDate.now())
+    val time = if (current.length > 10 && current[10] == 'T') current.substring(10) else ""
+    DatePickerDialog(ctx, { _, y, m, day -> onPick(LocalDate.of(y, m + 1, day).toString() + time) }, d.year, d.monthValue - 1, d.dayOfMonth).show()
+}
+
+/** Frontmatter as editable properties, collapsed by default (like Obsidian "Properties"). */
+@Composable
+private fun PropsSection(vm: AppVM) {
+    val ctx = LocalContext.current
+    var open by rememberSaveable { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
+    val ps = vm.edProps
+    TextButton(onClick = { open = !open }, contentPadding = PaddingValues(horizontal = 16.dp)) {
+        Text(
+            (if (open) "▾ " else "▸ ") + "Eigenschaften" + if (ps.isNotEmpty()) " (${ps.size})" else "",
+            style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.outline,
+        )
+    }
+    if (!open) return
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        ps.forEach { p ->
+            key(vm.edKey, p.key) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(p.key, Modifier.width(110.dp), style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (isDateProp(p)) {
+                        TextButton(onClick = { pickDate(ctx, p.value) { vm.setProp(p.key, it) } }, modifier = Modifier.weight(1f)) {
+                            Text("📅 " + p.value.ifEmpty { "Datum wählen" }, Modifier.fillMaxWidth())
+                        }
+                    } else {
+                        var v by remember { mutableStateOf(p.value) }
+                        BasicTextField(
+                            value = v, onValueChange = { v = it.replace("\n", ""); vm.setProp(p.key, v, p.list) },
+                            singleLine = true, modifier = Modifier.weight(1f).padding(vertical = 12.dp),
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            decorationBox = { inner ->
+                                Box { if (v.isEmpty()) Text("leer", color = MaterialTheme.colorScheme.outline); inner() }
+                            },
+                        )
+                    }
+                    TextButton(onClick = { vm.removeProp(p.key) }) { Text("×") }
+                }
+            }
+        }
+        TextButton(onClick = { adding = true }) { Text("＋ Eigenschaft") }
+    }
+    if (adding) AddPropDialog(onAdd = { k, v -> vm.setProp(k, v); adding = false }) { adding = false }
+}
+
+@Composable
+private fun AddPropDialog(onAdd: (String, String) -> Unit, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var name by remember { mutableStateOf("") }
+    var isDate by remember { mutableStateOf(false) }
+    var value by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Eigenschaft hinzufügen") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") },
+                    placeholder = { Text("z.B. due, ort, quelle") }, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = !isDate, onClick = { isDate = false; value = "" }, label = { Text("Text") })
+                    FilterChip(selected = isDate, onClick = { isDate = true; value = LocalDate.now().toString() }, label = { Text("Datum") })
+                }
+                if (isDate) {
+                    OutlinedButton(onClick = { pickDate(ctx, value) { value = it } }, modifier = Modifier.fillMaxWidth()) { Text("📅 $value") }
+                } else {
+                    OutlinedTextField(value, { value = it }, singleLine = true, label = { Text("Wert") }, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onAdd(name, value) }, enabled = cleanKey(name).isNotEmpty()) { Text("Hinzufügen") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+    )
 }
 
 /** Searchable list of all tags with counts; tap filters the note list. */

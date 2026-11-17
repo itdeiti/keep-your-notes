@@ -283,6 +283,18 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         edFront = withTags(edFront, edTags - t)
     }
 
+    /** Frontmatter properties shown in "Eigenschaften" (tags and pinned have their own controls). */
+    val edProps: List<Prop> get() = props(edFront).filter { it.key != "tags" && it.key != "pinned" }
+
+    fun setProp(key: String, value: String, list: Boolean = false) {
+        val k = cleanKey(key)
+        if (k.isNotEmpty()) edFront = withProp(edFront, k, value, list)
+    }
+
+    fun removeProp(key: String) {
+        edFront = withProp(edFront, key, null)
+    }
+
     fun togglePin() {
         edFront = if (edPinned) edFront.filter { it.trim() != "pinned: true" } else edFront + "pinned: true"
     }

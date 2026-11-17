@@ -102,3 +102,37 @@ class FilterTest {
         assertEquals(listOf("Zahnarzt", "Pasta", "Kuchen", "Steuer"), titles(null, "#"))
     }
 }
+
+class PropsTest {
+    private val front = listOf(
+        "created: 2026-11-17T14:32",
+        "source: \"https://ex.com/a#b\"",
+        "aliases:",
+        "  - Eins",
+        "  - Zwei",
+        "tags: [kochen]",
+        "due: 2026-12-01",
+        "ort: Berlin",
+    )
+
+    @Test fun parsesScalarsListsAndQuotes() {
+        val p = props(front).associateBy { it.key }
+        assertEquals("2026-11-17T14:32", p["created"]!!.value)
+        assertEquals("https://ex.com/a#b", p["source"]!!.value)
+        assertEquals(Prop("aliases", "Eins, Zwei", true), p["aliases"])
+        assertTrue(isDateProp(p["created"]!!))
+        assertTrue(isDateProp(p["due"]!!))
+        assertFalse(isDateProp(p["ort"]!!))
+    }
+
+    @Test fun setKeepsPositionAndRemoves() {
+        val f = withProp(front, "aliases", "Eins, Drei", list = true)
+        assertEquals("aliases: [Eins, Drei]", f[2])
+        assertEquals("tags: [kochen]", f[3]) // list lines of the old value are gone
+        assertEquals("due: 2027-01-05", withProp(f, "due", "2027-01-05")[4])
+        assertEquals(listOf("created: 2026-11-17T14:32"), withProp(listOf("created: 2026-11-17T14:32", "ort: x"), "ort", null))
+        assertEquals("notiz: \"Achtung: wichtig\"", withProp(emptyList(), "notiz", "Achtung: wichtig").single())
+        assertEquals("Achtung: wichtig", props(listOf("notiz: \"Achtung: wichtig\"")).single().value)
+        assertEquals("mein_feld", cleanKey(" mein feld! "))
+    }
+}

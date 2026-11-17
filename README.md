@@ -12,6 +12,7 @@ Small Android app that replaces Google Keep and keeps every note as a Markdown f
   - Share a page from the browser → the app downloads it, keeps the article (Readability, Firefox reader mode) and converts it to Markdown: headings, lists, links, quotes, code, tables, images as remote links.
   - Select text, then "Teilen" in Chrome → quote plus link back to the highlighted passage.
   - Select text in any app → "Als Notiz" in the selection menu.
+- Properties ("Eigenschaften", collapsed under the title): every frontmatter field except `tags`/`pinned`, editable inline, × removes, "＋ Eigenschaft" adds text or date. Date fields (value starts with YYYY-MM-DD or key like `due`, `datum`, `created`) open a date picker and store `YYYY-MM-DD`; an existing time part (`created: 2026-11-17T14:32`) is kept. New notes get `created:` with date and time.
 - Tags: chips under the title; × removes, ＋ picks an existing tag or creates a new one (`tags: [a, b]` in the frontmatter).
 - Nightly inbox sorting on the Mac (see below).
 - Git: saving commits right away (works offline), pushing happens as soon as there is network, the app pulls when opened and every 3 hours. A conflict keeps the server version and saves the phone version next to it as `… (Konflikt Handy <time>).md`.

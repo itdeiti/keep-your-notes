@@ -51,6 +51,69 @@ fun filterNotes(notes: List<Note>, tag: String?, query: String): List<Note> {
     }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified })
 }
 
+/** One frontmatter property for display/editing; lists are shown comma-separated. */
+data class Prop(val key: String, val value: String, val list: Boolean)
+
+private val PROP_LINE = Regex("""^([A-Za-z_][\w-]*):\s?(.*)$""")
+private val DATE_START = Regex("""^\d{4}-\d{2}-\d{2}""")
+private val DATE_KEYS = setOf("created", "date", "datum", "due", "faellig", "fällig", "deadline", "updated", "modified", "geburtstag")
+
+fun props(front: List<String>): List<Prop> {
+    val out = mutableListOf<Prop>()
+    for (l in front) {
+        val m = PROP_LINE.find(l)
+        if (m != null) { out += Prop(m.groupValues[1], m.groupValues[2].trim(), false); continue }
+        val t = l.trim()
+        if (t.startsWith("- ") && out.isNotEmpty()) {
+            val p = out.last()
+            val item = t.removePrefix("- ").trim().trim('"', '\'')
+            out[out.lastIndex] = p.copy(value = if (p.value.isEmpty()) item else p.value + ", " + item, list = true)
+        }
+    }
+    return out.map { p ->
+        val v = p.value
+        when {
+            v.startsWith("[") && v.endsWith("]") -> p.copy(
+                value = v.drop(1).dropLast(1).split(",").map { it.trim().trim('"', '\'') }.filter { it.isNotEmpty() }.joinToString(", "),
+                list = true,
+            )
+            v.length >= 2 && ((v.first() == '"' && v.last() == '"') || (v.first() == '\'' && v.last() == '\'')) ->
+                p.copy(value = v.drop(1).dropLast(1).replace("\\\"", "\""))
+            else -> p
+        }
+    }
+}
+
+fun isDateProp(p: Prop) = !p.list && (DATE_START.containsMatchIn(p.value) || p.key.lowercase() in DATE_KEYS)
+
+private fun yamlScalar(v: String): String {
+    val t = v.trim()
+    val risky = t.isNotEmpty() && (t.first() in "[]{}>|*&!%@`#'\"-?:," || ": " in t || " #" in t || t.endsWith(":"))
+    return if (risky) "\"" + t.replace("\\", "\\\\").replace("\"", "\\\"") + "\"" else t
+}
+
+/** Set (value != null) or remove (value == null) a property, keeping its position. */
+fun withProp(front: List<String>, key: String, value: String?, list: Boolean = false): List<String> {
+    val out = mutableListOf<String>()
+    var skipping = false
+    var pos = -1
+    for (l in front) {
+        if (PROP_LINE.find(l)?.groupValues?.get(1) == key) { skipping = true; pos = out.size; continue }
+        if (skipping && l.trimStart().startsWith("- ")) continue
+        skipping = false
+        out += l
+    }
+    if (value != null) {
+        val line = "$key: " + if (list) "[" + value.split(",").map { it.trim() }.filter { it.isNotEmpty() }.joinToString(", ") + "]"
+        else yamlScalar(value)
+        if (pos >= 0) out.add(pos, line) else out += line
+    }
+    return out
+}
+
+/** "Mein Feld" -> "Mein_Feld" (YAML-safe key) */
+fun cleanKey(raw: String) = raw.trim().replace(Regex("\\s+"), "_").replace(Regex("[^\\w-]"), "")
+
 /** "Mein Tag!" -> "mein-tag" */
 fun cleanTag(raw: String) = raw.trim().removePrefix("#").lowercase()
     .replace(Regex("\\s+"), "-").replace(Regex("[^\\p{L}\\d_/-]"), "").trim('-')
@@ -108,5 +171,6 @@ object Vault {
         return path
     }
 
+    /** `created:` keeps date and time (YYYY-MM-DDTHH:MM); other date properties are YYYY-MM-DD. */
     fun nowIso(): String = LocalDateTime.now().withSecond(0).withNano(0).toString()
 }
