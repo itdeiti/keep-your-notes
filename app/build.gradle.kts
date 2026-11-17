@@ -18,6 +18,17 @@ android {
         versionName = "0.1"
     }
 
+    // Debug key lives in the repo so every Mac signs with the same key and the
+    // phone accepts updates (a new key would force uninstall = lose token/settings).
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildFeatures { compose = true }
 
     compileOptions {

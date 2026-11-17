@@ -19,6 +19,8 @@ Small Android app that replaces Google Keep and keeps every note as a Markdown f
 
 ## Setup
 
+New or reset Mac: see [SETUP-MAC.md](SETUP-MAC.md) (tools, SSH, Ollama, LaunchAgent, phone). A ready-to-install APK is in `apk/notizen.apk` (`adb install -r apk/notizen.apk`).
+
 ### 1. GitHub
 
 1. Create a private repo, e.g. `vault` (empty or with a README).
