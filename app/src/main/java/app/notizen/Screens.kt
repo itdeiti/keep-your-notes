@@ -279,6 +279,7 @@ fun EditorScreen(vm: AppVM) {
                     }
                 },
             )
+            if (vm.clipping) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (vm.edPreview) {
                     MarkdownView(

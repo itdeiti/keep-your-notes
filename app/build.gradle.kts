@@ -52,5 +52,8 @@ dependencies {
     // JGit 5.13 is the last line built for Java 8 and runs on Android.
     implementation("org.eclipse.jgit:org.eclipse.jgit:5.13.3.202401111512-r")
     implementation("org.slf4j:slf4j-nop:1.7.36")
+    // Firefox reader-mode algorithm (brings jsoup) for clipping whole web pages.
+    implementation("net.dankito.readability4j:readability4j:1.0.8")
+    implementation("org.jsoup:jsoup:1.18.1") // newer than the 1.11 Readability4J pulls in
     testImplementation("junit:junit:4.13.2")
 }

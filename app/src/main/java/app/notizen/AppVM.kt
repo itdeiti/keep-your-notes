@@ -37,6 +37,9 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     var edPreview by mutableStateOf(false)
     var edKey by mutableIntStateOf(0)
     var dictateOnOpen by mutableStateOf(false)
+    private var clipKey by mutableIntStateOf(-1)
+    val clipping get() = clipKey == edKey
+    private var edFolder = "inbox"
     private var edSaved = ""
 
     val edPinned get() = isPinned(edFront)
@@ -109,10 +112,11 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     fun handleIntent(i: Intent?) {
         if (i == null || !ready()) return
         when {
-            i.action == Intent.ACTION_SEND -> newNote(
-                "note",
-                text = i.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
-                title = i.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty(),
+            i.action == Intent.ACTION_SEND -> clip(
+                i.getStringExtra(Intent.EXTRA_TEXT).orEmpty(), i.getStringExtra(Intent.EXTRA_SUBJECT), false,
+            )
+            i.action == Intent.ACTION_PROCESS_TEXT -> clip(
+                i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(), null, true,
             )
             i.hasExtra("new") -> newNote(i.getStringExtra("new") ?: "note")
             i.hasExtra("open") -> openPath(i.getStringExtra("open")!!)
@@ -145,11 +149,12 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         if (f.exists()) open(Vault.read(root, f))
     }
 
-    fun newNote(kind: String, text: String = "", title: String = "") {
+    fun newNote(kind: String, text: String = "", title: String = "", folder: String = "inbox", front: List<String> = emptyList()) {
         saveEditor()
         edPath = null
         edTitle = title
-        edFront = listOf("created: ${Vault.nowIso()}")
+        edFolder = folder
+        edFront = listOf("created: ${Vault.nowIso()}") + front
         val body = if (kind == "list") "- [ ] " else text
         edBody = TextFieldValue(body, TextRange(body.length))
         edPreview = false
@@ -161,7 +166,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     /** Write the file and commit locally; push happens in the background. */
     fun saveEditor() {
-        if (screen != Screen.Edit || snapshot() == edSaved) return
+        if (screen != Screen.Edit || clipping || snapshot() == edSaved) return
         val body = edBody.text
         val title = edTitle.trim()
         if (edPath == null && title.isBlank() && body.isBlank()) return
@@ -170,7 +175,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         if (path == null) {
             val first = body.lineSequence().map { Markdown.stripTaskMeta(it.replace(Markdown.LIST, "").trimStart('#', ' ')) }
                 .firstOrNull { it.isNotBlank() }.orEmpty().take(40)
-            path = Vault.uniquePath(root, "inbox", title.ifBlank { first })
+            path = Vault.uniquePath(root, edFolder, title.ifBlank { first })
         } else if (title.isNotBlank() && title != titleOf(path)) {
             val np = Vault.uniquePath(root, path.substringBeforeLast('/', ""), title)
             if (File(root, path).renameTo(File(root, np))) path = np
@@ -185,6 +190,46 @@ class AppVM(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
             SyncWorker.enqueue(ctx)
         }
+    }
+
+    /** Shared text or link → Markdown note in Clippings/. A bare link loads the whole page. */
+    private fun clip(text: String, subject: String?, selection: Boolean) {
+        if (text.isBlank()) return
+        when (val share = Clipper.parseShare(text, subject, selection)) {
+            is Clipper.Share.Plain -> newNote("note", text = share.text, title = share.title.orEmpty())
+            is Clipper.Share.Quote -> showClip(Clipper.quote(share))
+            is Clipper.Share.Page -> {
+                newNote("note", title = share.title.orEmpty(), folder = Clipper.FOLDER)
+                edBody = TextFieldValue("Lade ${share.url} …")
+                edPreview = true
+                val key = edKey
+                clipKey = key
+                viewModelScope.launch {
+                    val c = withContext(Dispatchers.IO) {
+                        try { Clipper.page(share) } catch (e: Exception) { Clipper.failed(share, e) }
+                    }
+                    clipKey = -1
+                    if (edKey == key && screen == Screen.Edit) {
+                        edTitle = c.title
+                        edFront = edFront + c.front
+                        edBody = TextFieldValue(c.body)
+                        edSaved = ""
+                        saveEditor()
+                    } else { // user left meanwhile: save straight to disk
+                        val root = Vault.dir(ctx)
+                        Vault.write(root, Vault.uniquePath(root, Clipper.FOLDER, c.title), listOf("created: ${Vault.nowIso()}") + c.front, c.body)
+                        GitSync.commit(ctx, "Clip: ${c.title}")
+                        SyncWorker.enqueue(ctx)
+                        reload()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showClip(c: Clipper.Clip) {
+        newNote("note", text = c.body, title = c.title, folder = Clipper.FOLDER, front = c.front)
+        edPreview = true
     }
 
     fun closeEditor() {

@@ -33,13 +33,14 @@ object Markdown {
     private val META_STRIP = Regex("""\s*(📅|⏰|✅|⏳|🛫|➕) ?\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?""")
     private val DUE = Regex("""📅 ?(\d{4}-\d{2}-\d{2})""")
 
-    private enum class K { BOLD, STRIKE, ITALIC, CODE, LINK, WIKI, TAG, META }
+    private enum class K { BOLD, STRIKE, ITALIC, CODE, IMAGE, LINK, WIKI, TAG, META }
 
     private val RULES = listOf(
         K.BOLD to Regex("""\*\*(.+?)\*\*"""),
         K.STRIKE to Regex("""~~(.+?)~~"""),
         K.ITALIC to Regex("""(?<![*\w])\*(?![\s*])(.+?)(?<![\s*])\*(?![*\w])"""),
         K.CODE to Regex("""`([^`]+)`"""),
+        K.IMAGE to Regex("""!\[([^\]]*)\]\(([^)\s]+)\)"""),
         K.LINK to Regex("""\[([^\]]+)\]\(([^)\s]+)\)"""),
         K.WIKI to Regex("""\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"""),
         K.TAG to Regex("""(?<![\w#&/])#([\p{L}_][\p{L}\d_/-]*)"""),
@@ -52,7 +53,7 @@ object Markdown {
         K.STRIKE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
         K.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
         K.CODE -> SpanStyle(fontFamily = FontFamily.Monospace, background = c.code)
-        K.LINK, K.WIKI -> SpanStyle(color = c.link)
+        K.LINK, K.WIKI, K.IMAGE -> SpanStyle(color = c.link)
         K.TAG -> SpanStyle(color = c.tag)
         K.META -> SpanStyle(color = c.meta, fontSize = 0.85.em)
     }
@@ -115,6 +116,11 @@ object Markdown {
                         append(m.groupValues[1])
                     }
                 } else withStyle(style(k, c)) { append(m.groupValues[1]) }
+                K.IMAGE -> if (links) {
+                    withLink(LinkAnnotation.Url(m.groupValues[2], TextLinkStyles(SpanStyle(color = c.link)))) {
+                        append("🖼 " + m.groupValues[1].ifBlank { "Bild" })
+                    }
+                } else append("🖼")
                 K.WIKI -> withStyle(style(k, c)) { append(m.groupValues[2].ifEmpty { m.groupValues[1] }) }
                 K.TAG, K.META -> withStyle(style(k, c)) { append(m.value) }
                 else -> withStyle(style(k, c)) { append(m.groupValues[1]) }
