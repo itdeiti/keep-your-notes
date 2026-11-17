@@ -16,7 +16,7 @@ data class Note(val path: String, val front: List<String>, val body: String, val
 fun titleOf(path: String) = path.substringAfterLast('/').removeSuffix(".md")
 fun isPinned(front: List<String>) = front.any { it.trim() == "pinned: true" }
 
-private fun frontTags(front: List<String>): Set<String> {
+fun frontTags(front: List<String>): Set<String> {
     val i = front.indexOfFirst { it.startsWith("tags:") }
     if (i < 0) return emptySet()
     val inline = front[i].removePrefix("tags:").trim().removePrefix("[").removeSuffix("]")
@@ -24,6 +24,24 @@ private fun frontTags(front: List<String>): Set<String> {
     else front.drop(i + 1).takeWhile { it.trimStart().startsWith("- ") }.map { it.trimStart().removePrefix("- ") }
     return items.map { it.trim().trim('"', '\'').removePrefix("#") }.filter { it.isNotEmpty() }.toSet()
 }
+
+/** Frontmatter with the tags line replaced (inline form `tags: [a, b]`); no tags removes the line. */
+fun withTags(front: List<String>, tags: List<String>): List<String> {
+    val out = mutableListOf<String>()
+    var skipping = false
+    for (l in front) {
+        if (l.startsWith("tags:")) { skipping = l.removePrefix("tags:").isBlank(); continue }
+        if (skipping && l.trimStart().startsWith("- ")) continue
+        skipping = false
+        out += l
+    }
+    if (tags.isNotEmpty()) out += "tags: [${tags.joinToString(", ")}]"
+    return out
+}
+
+/** "Mein Tag!" -> "mein-tag" */
+fun cleanTag(raw: String) = raw.trim().removePrefix("#").lowercase()
+    .replace(Regex("\\s+"), "-").replace(Regex("[^\\p{L}\\d_/-]"), "").trim('-')
 
 object Vault {
     private val skip = setOf(".git", ".obsidian", ".trash")
@@ -39,7 +57,7 @@ object Vault {
         val root = dir(ctx)
         if (!root.isDirectory) return emptyList()
         return root.walkTopDown()
-            .onEnter { it.name !in skip }
+            .onEnter { it == root || (it.name !in skip && !it.name.startsWith(".")) }
             .filter { it.isFile && it.extension == "md" }
             .mapNotNull { runCatching { read(root, it) }.getOrNull() }
             .toList()

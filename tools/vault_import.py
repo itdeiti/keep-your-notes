@@ -9,6 +9,7 @@ that only the user opens.
   python3 vault_import.py topics DEST_VAULT [K]        # step 3: group notes by meaning, name groups -> tag-vorschlag.md, regeln.md
   python3 vault_import.py sort   DEST_VAULT            # step 5: folder + tags per note from regeln.md -> vorschau.csv
   python3 vault_import.py apply  DEST_VAULT            # step 6: move notes per vorschau.csv, write tags, remove _import/
+  python3 vault_import.py inbox  VAULT                 # nightly: pull, sort inbox/ by .sortierung/regeln.md, commit, push
 
 Local models via Ollama (http://localhost:11434): bge-m3 for embeddings, qwen2.5:32b for naming/sorting.
 """
@@ -568,11 +569,166 @@ def cmd_apply(dest):
     return 0
 
 
+# ---------------- nightly: inbox ----------------
+
+def git(vault, *args, check=True):
+    r = subprocess.run(["git", "-C", vault, *args], capture_output=True, text=True, timeout=120)
+    if check and r.returncode != 0:
+        raise RuntimeError("git " + args[0])
+    return r.stdout
+
+
+def notify(msg):
+    subprocess.run(["osascript", "-e", 'display notification "%s" with title "Notizen"' % msg.replace('"', "'")],
+                   capture_output=True, timeout=10)
+
+
+def classify(rules, folders, tags, title, body, created, has_open, old_tags):
+    prompt = (
+        rules + "\n\n---\nOrdne diese Notiz nach den Regeln oben ein.\n"
+        "TITEL: %s\nERSTELLT: %s\nOFFENE AUFGABEN: %s\nVORHANDENE TAGS: %s\nTEXT:\n%s\n\n"
+        "Waehle genau einen Ordner aus: %s.\nWaehle 1 bis 3 Tags nur aus: %s.\n"
+        'Antworte nur als JSON: {"ordner": "...", "tags": ["..."], "begruendung": "hoechstens 12 Woerter"}'
+    ) % (title, created, "ja" if has_open else "nein", " ".join(old_tags), body[:3000],
+         ", ".join(folders), ", ".join(tags))
+    r = ask_json(prompt)
+    folder = str(r.get("ordner", "")).strip().lower()
+    if folder not in folders:
+        stats["ordner_ungueltig"] += 1
+        folder = "inbox"
+    raw = r.get("tags", [])
+    raw = raw if isinstance(raw, list) else [raw]
+    picked = []
+    for t in raw:
+        t = str(t).strip().lower().lstrip("#")
+        if t in tags and t not in picked:
+            picked.append(t)
+    return folder, picked[:3]
+
+
+def front_tags(front):
+    out, inside = [], False
+    for l in front:
+        if l.startswith("tags:"):
+            rest = l[5:].strip()
+            inside = not rest
+            out += [t.strip().strip("'\"").lstrip("#") for t in re.split(r"[,\[\]]", rest) if t.strip()]
+        elif inside and l.strip().startswith("- "):
+            out.append(l.strip()[2:].strip().strip("'\"").lstrip("#"))
+        else:
+            inside = False
+    return [t for t in out if t]
+
+
+def set_tags(front, tags):
+    out, skipping = [], False
+    for l in front:
+        if l.startswith("tags:"):
+            skipping = not l[5:].strip()
+            continue
+        if skipping and l.strip().startswith("- "):
+            continue
+        skipping = False
+        out.append(l)
+    if tags:
+        out.append("tags: [%s]" % ", ".join(tags))
+    return out
+
+
+def cmd_inbox(vault, min_age_min=60):
+    vault = os.path.abspath(os.path.expanduser(vault))
+    conf = os.path.join(vault, ".sortierung")
+    try:
+        urllib.request.urlopen(OLLAMA + "/api/version", timeout=5)
+    except Exception:
+        notify("Inbox nicht sortiert: Ollama laeuft nicht")
+        print("ollama_nicht_erreichbar 1")
+        return 1
+    if git(vault, "status", "--porcelain").strip():
+        git(vault, "add", "-A")
+        git(vault, "commit", "-q", "-m", "Mac: Aenderungen vor Inbox-Sortierung")
+        stats["vorher_committet"] += 1
+    if subprocess.run(["git", "-C", vault, "pull", "-q", "--no-rebase", "--no-edit"],
+                      capture_output=True, timeout=120).returncode != 0:
+        git(vault, "merge", "--abort", check=False)
+        notify("Inbox nicht sortiert: Git-Pull fehlgeschlagen")
+        print("pull_fehlgeschlagen 1")
+        return 1
+
+    rules, folders, tags = read_rules(conf)
+    state_path = os.path.join(conf, "geprueft.json")
+    state = json.load(open(state_path, encoding="utf-8")) if os.path.exists(state_path) else {}
+    inbox = os.path.join(vault, "inbox")
+    now = datetime.now().timestamp()
+    moved = 0
+    for name in sorted(os.listdir(inbox)) if os.path.isdir(inbox) else []:
+        if not name.endswith(".md"):
+            continue
+        rel = "inbox/" + name
+        path = os.path.join(inbox, name)
+        text = open(path, encoding="utf-8").read()
+        h = hashlib.sha256(text.encode()).hexdigest()
+        if state.get(rel) == h:
+            stats["unveraendert_bleibt"] += 1
+            continue
+        last = git(vault, "log", "-1", "--format=%ct", "--", rel, check=False).strip()
+        if last and now - int(last) < min_age_min * 60:
+            stats["zu_frisch"] += 1
+            continue
+        front, body = split_front(text)
+        if not body.strip():
+            stats["leer"] += 1
+            continue
+        old = front_tags(front)
+        try:
+            folder, picked = classify(rules, folders, tags, name[:-3], body,
+                                      front_get(front, "created") or "unbekannt",
+                                      bool(OPEN_TASK.search(body)), old)
+        except Exception as e:
+            stats["fehler_" + type(e).__name__] += 1
+            continue
+        keep = [t for t in old if t in tags]  # tags the user set by hand stay
+        new_tags = (keep + [t for t in picked if t not in keep])[:3] if picked or keep else []
+        if folder == "inbox":
+            state[rel] = h
+            stats["bleibt_in_inbox"] += 1
+            continue
+        os.makedirs(os.path.join(vault, folder), exist_ok=True)
+        target = os.path.join(vault, folder, name)
+        n = 2
+        while os.path.exists(target):
+            target = os.path.join(vault, folder, "%s %d.md" % (name[:-3], n)); n += 1
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(("---\n" + "\n".join(set_tags(front, new_tags)) + "\n---\n" if (front or new_tags) else "") + body)
+        git(vault, "mv", rel, os.path.relpath(target, vault))
+        state.pop(rel, None)
+        moved += 1
+        stats["verschoben_" + folder] += 1
+    # forget state of files that are gone
+    state = {k: v for k, v in state.items() if os.path.exists(os.path.join(vault, k))}
+    json.dump(state, open(state_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    git(vault, "add", "-A")
+    if git(vault, "status", "--porcelain").strip():
+        git(vault, "commit", "-q", "-m", "Inbox sortiert: %d verschoben (%s)" % (moved, LLM))
+    push = subprocess.run(["git", "-C", vault, "push", "-q"], capture_output=True, timeout=120).returncode
+    stats["push_fehler"] += 1 if push else 0
+    msg = "Inbox: %d einsortiert, %d bleiben" % (moved, stats["bleibt_in_inbox"] + stats["unveraendert_bleibt"])
+    if push:
+        msg += " (Push fehlgeschlagen)"
+    if moved or push:
+        notify(msg)
+    print(datetime.now().strftime("%Y-%m-%d %H:%M"), "verschoben", moved)
+    for k in sorted(stats):
+        print(k, stats[k])
+    return 0
+
+
 if __name__ == "__main__":
     cmds = {"copy": lambda: cmd_copy(sys.argv[2], sys.argv[3]),
             "topics": lambda: cmd_topics(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 18),
             "sort": lambda: cmd_sort(sys.argv[2]),
-            "apply": lambda: cmd_apply(sys.argv[2])}
+            "apply": lambda: cmd_apply(sys.argv[2]),
+            "inbox": lambda: cmd_inbox(sys.argv[2])}
     if len(sys.argv) >= 3 and sys.argv[1] in cmds:
         try:
             sys.exit(cmds[sys.argv[1]]())

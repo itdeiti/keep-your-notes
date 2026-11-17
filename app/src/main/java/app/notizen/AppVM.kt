@@ -266,6 +266,22 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         edKey++
     }
 
+    val edTags: List<String> get() = frontTags(edFront).toList()
+
+    /** All tags in the vault, most used first (frontmatter and #tags in text). */
+    fun allTags(): List<String> = notes.flatMap { it.tags }.groupingBy { it }.eachCount()
+        .entries.sortedByDescending { it.value }.map { it.key }
+
+    fun addTag(raw: String) {
+        val t = cleanTag(raw)
+        if (t.isEmpty() || t in edTags) return
+        edFront = withTags(edFront, edTags + t)
+    }
+
+    fun removeTag(t: String) {
+        edFront = withTags(edFront, edTags - t)
+    }
+
     fun togglePin() {
         edFront = if (edPinned) edFront.filter { it.trim() != "pinned: true" } else edFront + "pinned: true"
     }

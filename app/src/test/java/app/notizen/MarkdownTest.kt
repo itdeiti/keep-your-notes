@@ -99,4 +99,15 @@ class MarkdownTest {
         assertEquals("# Hallo\nText", body)
         assertEquals(text, Vault.serialize(front, body))
     }
+
+    @Test fun tagsInFrontmatter() {
+        val front = listOf("created: 2026-11-17T10:00", "tags:", "  - alt", "  - zwei", "pinned: true")
+        assertEquals(setOf("alt", "zwei"), frontTags(front))
+        val f2 = withTags(front, listOf("kochen", "neu-tag"))
+        assertEquals(listOf("created: 2026-11-17T10:00", "pinned: true", "tags: [kochen, neu-tag]"), f2)
+        assertEquals(setOf("kochen", "neu-tag"), frontTags(f2))
+        assertEquals(listOf("created: 2026-11-17T10:00", "pinned: true"), withTags(f2, emptyList()))
+        assertEquals("mein-tag", cleanTag(" #Mein Tag! "))
+        assertEquals("haus/garten", cleanTag("Haus/Garten"))
+    }
 }

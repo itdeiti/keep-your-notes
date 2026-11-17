@@ -27,9 +27,11 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
@@ -38,6 +40,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -48,6 +51,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -84,6 +89,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
@@ -279,6 +285,7 @@ fun EditorScreen(vm: AppVM) {
                     }
                 },
             )
+            TagRow(vm)
             if (vm.clipping) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (vm.edPreview) {
@@ -325,6 +332,65 @@ fun EditorScreen(vm: AppVM) {
             }
         }
     }
+}
+
+/** Tags of the open note: tap × to remove, ＋ to add an existing or new tag. */
+@Composable
+private fun TagRow(vm: AppVM) {
+    var adding by remember { mutableStateOf(false) }
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        items(vm.edTags) { t ->
+            InputChip(
+                selected = false,
+                onClick = { vm.removeTag(t) },
+                label = { Text("#$t") },
+                trailingIcon = { Text("×") },
+            )
+        }
+        item {
+            AssistChip(onClick = { adding = true }, label = { Text(if (vm.edTags.isEmpty()) "＋ Tag" else "＋") })
+        }
+    }
+    if (adding) TagPicker(vm) { adding = false }
+}
+
+@Composable
+private fun TagPicker(vm: AppVM, onDone: () -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val all = remember(vm.notes) { vm.allTags() }
+    val q = cleanTag(query)
+    val matches = all.filter { it !in vm.edTags && (q.isEmpty() || it.contains(q)) }.take(30)
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("Tag hinzufügen") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it }, singleLine = true,
+                    placeholder = { Text("suchen oder neu") }, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { if (q.isNotEmpty()) { vm.addTag(matches.firstOrNull { it == q } ?: q); onDone() } }),
+                )
+                if (q.isNotEmpty() && q !in all && q !in vm.edTags) {
+                    TextButton(onClick = { vm.addTag(q); onDone() }) { Text("Neu: #$q") }
+                }
+                LazyColumn(Modifier.heightIn(max = 280.dp)) {
+                    items(matches) { t ->
+                        Text(
+                            "#$t",
+                            modifier = Modifier.fillMaxWidth().clickable { vm.addTag(t); onDone() }.padding(vertical = 10.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Fertig") } },
+    )
 }
 
 @Composable
