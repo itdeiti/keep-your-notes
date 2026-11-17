@@ -8,6 +8,7 @@ that only the user opens.
   python3 vault_import.py copy   SRC_VAULT DEST_VAULT  # steps 1+2: copy and clean into DEST/_import/
   python3 vault_import.py topics DEST_VAULT [K]        # step 3: group notes by meaning, name groups -> tag-vorschlag.md, regeln.md
   python3 vault_import.py sort   DEST_VAULT            # step 5: folder + tags per note from regeln.md -> vorschau.csv
+  python3 vault_import.py apply  DEST_VAULT            # step 6: move notes per vorschau.csv, write tags, remove _import/
 
 Local models via Ollama (http://localhost:11434): bge-m3 for embeddings, qwen2.5:32b for naming/sorting.
 """
@@ -496,10 +497,82 @@ def cmd_sort(dest):
     return 0
 
 
+# ---------------- step 6: apply ----------------
+
+def cmd_apply(dest):
+    import csv
+    dest = os.path.abspath(os.path.expanduser(dest))
+    stage = os.path.join(dest, "_import")
+    _, folders, tags = read_rules(stage)
+    with open(os.path.join(stage, "vorschau.csv"), encoding="utf-8-sig", newline="") as f:
+        sample = f.read(2048); f.seek(0)
+        delim = ";" if sample.count(";") >= sample.count(",") else ","
+        rows = list(csv.DictReader(f, delimiter=delim))
+    print("zeilen", len(rows))
+    for row in rows:
+        name = (row.get("datei") or "").strip()
+        src = os.path.join(stage, "notizen", name)
+        if not name or not os.path.exists(src):
+            stats["datei_fehlt"] += 1
+            continue
+        folder = (row.get("ordner") or "").strip().lower() or "inbox"
+        if folder not in folders:
+            stats["ordner_unbekannt_inbox"] += 1
+            folder = "inbox"
+        new_tags = []
+        for t in (row.get("tags") or "").replace(",", " ").split():
+            t = t.strip().lower().lstrip("#")
+            if t and t not in new_tags:
+                new_tags.append(t)
+                if t not in tags:
+                    stats["tag_ausserhalb_liste"] += 1
+        text = open(src, encoding="utf-8").read()
+        front, body = split_front(text)
+        # drop old tags (inline or YAML list), write the new ones
+        out, skipping = [], False
+        for l in front:
+            if l.startswith("tags:"):
+                skipping = not l[5:].strip()
+                continue
+            if skipping and l.strip().startswith("- "):
+                continue
+            skipping = False
+            out.append(l)
+        if new_tags:
+            out.append("tags: [%s]" % ", ".join(new_tags))
+        os.makedirs(os.path.join(dest, folder), exist_ok=True)
+        target = os.path.join(dest, folder, name)
+        n = 2
+        while os.path.exists(target):
+            target = os.path.join(dest, folder, "%s %d.md" % (name[:-3], n)); n += 1
+            stats["name_kollision"] += 1
+        mtime = os.path.getmtime(src)
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("---\n" + "\n".join(out) + "\n---\n" + body)
+        os.utime(target, (mtime, mtime))
+        os.remove(src)
+        stats["verschoben_" + folder] += 1
+    att = os.path.join(stage, "attachments")
+    if os.path.isdir(att) and os.listdir(att):
+        os.makedirs(os.path.join(dest, "attachments"), exist_ok=True)
+        for f_ in os.listdir(att):
+            shutil.move(os.path.join(att, f_), os.path.join(dest, "attachments", f_))
+            stats["anhang_verschoben"] += 1
+    left = len(os.listdir(os.path.join(stage, "notizen")))
+    print("uebrig_in_import", left)
+    if left == 0:
+        shutil.rmtree(stage)
+        print("import_ordner_entfernt 1")
+    for k in sorted(stats):
+        print(k, stats[k])
+    return 0
+
+
 if __name__ == "__main__":
     cmds = {"copy": lambda: cmd_copy(sys.argv[2], sys.argv[3]),
             "topics": lambda: cmd_topics(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 18),
-            "sort": lambda: cmd_sort(sys.argv[2])}
+            "sort": lambda: cmd_sort(sys.argv[2]),
+            "apply": lambda: cmd_apply(sys.argv[2])}
     if len(sys.argv) >= 3 and sys.argv[1] in cmds:
         try:
             sys.exit(cmds[sys.argv[1]]())
