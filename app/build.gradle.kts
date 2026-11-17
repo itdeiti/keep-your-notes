@@ -6,6 +6,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Version from git: every commit raises versionCode, so the phone shows which state it runs
+// and updates never go "down" by accident. Falls back to 1 without git (e.g. source zip).
+val gitCommits: Int = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }.getOrElse(1)
+
 android {
     namespace = "app.notizen"
     compileSdk = 36
@@ -14,8 +21,8 @@ android {
         applicationId = "app.notizen"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1"
+        versionCode = gitCommits
+        versionName = "0.$gitCommits"
     }
 
     // Debug key lives in the repo so every Mac signs with the same key and the

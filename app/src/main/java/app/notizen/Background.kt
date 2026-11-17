@@ -34,6 +34,7 @@ class App : Application() {
         // JGit looks for ~/.gitconfig; Android has no home directory.
         System.setProperty("user.home", filesDir.absolutePath)
         Reminders.createChannel(this)
+        Conflicts.createChannel(this)
         SyncWorker.schedulePeriodic(this)
     }
 }

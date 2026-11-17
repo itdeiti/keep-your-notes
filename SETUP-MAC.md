@@ -11,7 +11,7 @@ Nur die App aufs Handy bringen, ohne etwas zu bauen? Dann reichen Schritt 1 (Hom
 | SSH-Schlüssel für GitHub (privat) | `~/.ssh/id_ed25519_gh_itdeiti` (+ `.pub`) und Eintrag `Host github-personal` in `~/.ssh/config` | neuen Schlüssel erzeugen und bei GitHub eintragen (Schritt 2) |
 | Ungepushte Commits | `~/workspace/personal/notizen-app`, `~/workspace/personal/notes-vault` | vorher `git status` / `git push` in beiden |
 
-Alles andere steht in den Repos oder lässt sich neu laden: Code, APK, Debug-Schlüssel der App, LaunchAgent-Vorlage, Sortier-Regeln (`notes-vault/.sortierung/`), Ollama-Modelle.
+Alles andere steht in den Repos oder lässt sich neu laden: Code, APK (GitHub Releases), Debug-Schlüssel der App, LaunchAgent-Vorlage, Sortier-Regeln (`notes-vault/.sortierung/`), Ollama-Modelle.
 
 ## 1. Programme
 
@@ -89,6 +89,14 @@ Für Sync aus Obsidian heraus das Community-Plugin **Git** (Vinzent03) installie
 - Auto commit-and-sync interval: 5 Minuten
 - Pull on startup: an
 
+Wichtig, wenn der SSH-Schlüssel eine Passphrase hat: Obsidian kann sie nicht abfragen, Push und Pull aus dem Plugin scheitern dann ohne sichtbare Meldung. Deshalb die Passphrase einmal im Schlüsselbund ablegen:
+
+```bash
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519_gh_itdeiti
+```
+
+und im Eintrag `Host github-personal` in `~/.ssh/config` die Zeile `UseKeychain yes` ergänzen, damit der Schlüssel auch nach einem Neustart geladen wird. Test: eine Notiz ändern, in Obsidian Cmd+P → „Git: Commit-and-sync“, keine Fehlermeldung.
+
 Ohne das Plugin geht es auch, dann synct nur der Abend-Job.
 
 ## 5. Lokale KI für das Abend-Sortieren
@@ -131,10 +139,13 @@ Im Log soll eine Zeile `... verschoben N` stehen, keine Zeile `ollama_nicht_erre
 
 Am Handy einmalig: Einstellungen → Über das Telefon → 7× auf „Build-Nummer“ tippen. Dann unter Entwickleroptionen „USB-Debugging“ einschalten. Handy per USB anschließen und die Nachfrage „USB-Debugging zulassen?“ bestätigen.
 
-**Fertige APK aus dem Repo**, kein Bauen nötig:
+**Fertige APK aus den GitHub Releases**, kein Bauen nötig:
 
 ```bash
-adb install -r ~/workspace/personal/notizen-app/apk/notizen.apk
+GH_TOKEN=$(gh auth token --user itdeiti) gh release download --repo itdeiti/notizen-app --pattern notizen.apk --dir /tmp --clobber
+```
+```bash
+adb install -r /tmp/notizen.apk
 ```
 
 **Oder selbst bauen und installieren:**
@@ -153,18 +164,17 @@ Die App ist mit dem Debug-Schlüssel aus dem Repo signiert (`app/debug.keystore`
 
 Neue Handys oder eine Neuinstallation der App: in der App „Zugriff auf alle Dateien“ und Benachrichtigungen erlauben, dann Repo-URL `https://github.com/itdeiti/notes-vault.git` und einen fine-grained Token mit „Contents: Read and write“ nur für `notes-vault` eintragen. Mehr dazu in der `README.md`.
 
-## 7. APK im Repo aktualisieren
+## 7. Neue Version veröffentlichen
 
-Nach Änderungen an der App:
+Nach Änderungen an der App (committet und gepusht):
 
 ```bash
-./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk apk/notizen.apk
-```
-```bash
-git add apk/notizen.apk && git commit -m "APK aktualisiert" && git push
+tools/release.sh
 ```
 
-Die APK liegt bewusst im Repo, damit man ohne Build-Umgebung installieren kann. Jede Version macht das Repo um etwa 27 MB größer. Wird das zu viel, alte Versionen mit `git filter-repo` entfernen oder auf GitHub Releases umziehen.
+Das Skript baut die APK und legt ein GitHub Release `v0.<Anzahl Commits>` mit `notizen.apk` an, über das Konto `itdeiti` (egal, welches `gh`-Konto gerade aktiv ist). Die Versionsnummer kommt aus der Anzahl der Git-Commits; in der App steht sie unten in den Einstellungen.
+
+Früher lag die APK im Repo (`apk/notizen.apk`, je Version etwa 27 MB). Sie ist seit dem Umzug auf Releases nicht mehr im Repo, die alten Versionen stecken aber noch in der Git-Historie. Wer das Repo verkleinern will, entfernt sie mit `git filter-repo --path apk/ --invert-paths` (schreibt die Historie um, danach `git push --force`).
 
 ## Checkliste
 
@@ -174,3 +184,4 @@ Die APK liegt bewusst im Repo, damit man ohne Build-Umgebung installieren kann. 
 - [ ] `ollama list` zeigt `qwen2.5:32b`
 - [ ] `launchctl print gui/$(id -u)/app.notizen.inbox-sort` findet den Job, Testlauf im Log ok
 - [ ] `adb devices` zeigt das Handy, App installiert, App synchronisiert („Synchronisiert HH:MM“)
+- [ ] In Obsidian klappt „Git: Commit-and-sync“ ohne Fehler (Passphrase im Schlüsselbund)

@@ -43,7 +43,7 @@ object Reminders {
         return Vault.all(ctx).flatMap { n -> n.body.lines().mapNotNull { parse(n.path, it, def) } }
     }
 
-    private fun parse(path: String, line: String, def: String): Task? {
+    internal fun parse(path: String, line: String, def: String): Task? {
         val m = OPEN.find(line) ?: return null
         val r = REMIND.find(line)
         val d = DUE.find(line)

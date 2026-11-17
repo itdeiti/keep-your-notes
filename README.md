@@ -22,12 +22,12 @@ Small Android app that replaces Google Keep and keeps every note as a Markdown f
 - Properties ("Eigenschaften", collapsed under the title): every frontmatter field except `tags`/`pinned`, editable inline, × removes, "＋ Eigenschaft" adds text or date. Date fields (value starts with YYYY-MM-DD or key like `due`, `datum`, `created`) open a date picker and store `YYYY-MM-DD`; an existing time part (`created: 2026-11-17T14:32`) is kept. New notes get `created:` with date and time.
 - Tags: chips under the title; × removes, ＋ picks an existing tag or creates a new one (`tags: [a, b]` in the frontmatter).
 - Nightly inbox sorting on the Mac (see below).
-- Git: saving commits right away (works offline), pushing happens as soon as there is network, the app pulls when opened and every 3 hours. A conflict keeps the server version and saves the phone version next to it as `… (Konflikt Handy <time>).md`.
+- Git: saving commits right away (works offline), pushing happens as soon as there is network, the app pulls when opened and every 3 hours. A conflict keeps the server version and saves the phone version next to it as `… (Konflikt Handy <time>).md`; a notification and a "⚠ Konflikte" chip in the list point to it, and the copy has buttons to open the original, keep the phone version (replaces the original) or discard it.
 - The repo lives in `Documents/<Ordner>` on shared storage, so Obsidian Android can open the same folder. Obsidian is optional.
 
 ## Setup
 
-New or reset Mac: see [SETUP-MAC.md](SETUP-MAC.md) (tools, SSH, Ollama, LaunchAgent, phone). A ready-to-install APK is in `apk/notizen.apk` (`adb install -r apk/notizen.apk`).
+New or reset Mac: see [SETUP-MAC.md](SETUP-MAC.md) (tools, SSH, Ollama, LaunchAgent, phone). Ready-to-install APKs are GitHub releases (`notizen.apk`), published with `tools/release.sh`; the version (`0.<number of commits>`) is shown at the bottom of the settings.
 
 ### 1. GitHub
 
@@ -169,6 +169,7 @@ Stack: Kotlin, Jetpack Compose, JGit 5.13 (last Java 8 line, runs on Android), W
 | File | What |
 |---|---|
 | `GitSync.kt` | clone, commit, fetch + merge + conflict copies, push |
+| `Conflicts.kt` | conflict copies: names, notification, keep/discard |
 | `Vault.kt` | reading/writing notes, frontmatter |
 | `Clipper.kt` | share parsing, page download, HTML → Markdown |
 | `Markdown.kt` | highlighting, rendering, editing helpers |

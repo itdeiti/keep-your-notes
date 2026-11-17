@@ -160,6 +160,14 @@ fun ListScreen(vm: AppVM) {
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true, shape = RoundedCornerShape(28.dp),
             )
+            val conflicts = vm.conflictCount
+            if (conflicts > 0 || vm.showConflicts) FilterChip(
+                selected = vm.showConflicts,
+                onClick = { vm.showConflicts = !vm.showConflicts },
+                label = { Text("⚠ " + if (conflicts == 1) "1 Konflikt" else "$conflicts Konflikte") },
+                trailingIcon = if (vm.showConflicts) ({ Text("×") }) else null,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
             vm.folderFilter?.let { f ->
                 InputChip(
                     selected = true, onClick = { vm.folderFilter = null },
@@ -413,6 +421,7 @@ fun EditorScreen(vm: AppVM) {
                     }
                 },
             )
+            vm.edConflictOf?.let { orig -> ConflictBanner(orig, vm) }
             PropsSection(vm)
             TagRow(vm)
             if (vm.clipping) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
@@ -465,6 +474,42 @@ fun EditorScreen(vm: AppVM) {
                     Tool("🔗") { vm.edBody = Markdown.link(vm.edBody) }
                     Tool("▦") { vm.edBody = Markdown.table(vm.edBody) }
                 }
+            }
+        }
+    }
+}
+
+/** Shown on a conflict copy: what happened, and the two ways out. */
+@Composable
+private fun ConflictBanner(original: String, vm: AppVM) {
+    var confirm by remember { mutableStateOf<Boolean?>(null) } // true = keep this, false = discard
+    confirm?.let { keep ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text(if (keep) "Handy-Version behalten?" else "Kopie verwerfen?") },
+            text = {
+                Text(
+                    if (keep) "Diese Kopie ersetzt „${titleOf(original)}“. Die Server-Version bleibt in der Git-Historie."
+                    else "„${titleOf(original)}“ bleibt wie auf dem Server, diese Kopie wird gelöscht (bleibt in der Git-Historie).",
+                )
+            },
+            confirmButton = { TextButton({ confirm = null; vm.resolveConflict(keep) }) { Text(if (keep) "Behalten" else "Verwerfen") } },
+            dismissButton = { TextButton({ confirm = null }) { Text("Abbrechen") } },
+        )
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text(
+                "Konfliktkopie: So stand die Notiz auf dem Handy, als „${titleOf(original)}“ gleichzeitig woanders geändert wurde.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { vm.openConflictOriginal() }) { Text("Original") }
+                TextButton(onClick = { confirm = true }) { Text("Diese behalten") }
+                TextButton(onClick = { confirm = false }) { Text("Verwerfen") }
             }
         }
     }
@@ -982,6 +1027,13 @@ fun SettingsScreen(vm: AppVM) {
             Text(
                 "Vault-Ordner: " + Vault.dir(ctx).path,
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+            )
+            val version = remember {
+                runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0) }.getOrNull()
+                    ?.let { "Version ${it.versionName} (Build ${it.longVersionCode})" }
+            }
+            if (version != null) Text(
+                version, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
             )
         }
     }

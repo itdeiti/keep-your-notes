@@ -27,6 +27,8 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     var notes by mutableStateOf(listOf<Note>())
     var query by mutableStateOf("")
     var tag by mutableStateOf<String?>(null)
+    /** List shows only conflict copies (chip "⚠ Konflikte", or the conflict notification). */
+    var showConflicts by mutableStateOf(false)
     var folderFilter by mutableStateOf<String?>(null)
     var status by mutableStateOf("")
     var busy by mutableStateOf(false)
@@ -65,7 +67,10 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     /** "#ko" in the search field filters by tags containing "ko"; anything else searches title and text. */
     val tagQuery: String? get() = query.trim().takeIf { it.startsWith("#") }?.let { cleanTag(it) }
 
-    fun filtered(): List<Note> = filterNotes(notes, tag, query, folderFilter)
+    fun filtered(): List<Note> =
+        if (showConflicts) notes.filter { Conflicts.isCopy(it.path) } else filterNotes(notes, tag, query, folderFilter)
+
+    val conflictCount: Int get() = notes.count { Conflicts.isCopy(it.path) }
 
     /** Folder -> number of notes in it and below. */
     fun folderCounts(): List<Pair<String, Int>> {
@@ -170,13 +175,14 @@ class AppVM(app: Application) : AndroidViewModel(app) {
             i.action == Intent.ACTION_PROCESS_TEXT -> clip(
                 i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(), null, true,
             )
+            i.hasExtra("conflicts") -> { saveEditor(); showConflicts = true; screen = Screen.List; reload() }
             i.hasExtra("new") -> newNote(i.getStringExtra("new") ?: "note")
             i.hasExtra("open") -> openPath(i.getStringExtra("open")!!)
             i.hasExtra("edit") -> openPath(i.getStringExtra("edit")!!, edit = true)
             else -> return
         }
         // Consume, so a configuration change does not replay it.
-        i.removeExtra("new"); i.removeExtra("open"); i.removeExtra("edit"); i.action = null
+        i.removeExtra("new"); i.removeExtra("open"); i.removeExtra("edit"); i.removeExtra("conflicts"); i.action = null
     }
 
     // ---------- editor ----------
@@ -291,6 +297,33 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         saveEditor()
         screen = returnTo
         reload()
+    }
+
+    /** Original of the open note if it is a conflict copy, else null. */
+    val edConflictOf: String? get() = edPath?.let { Conflicts.original(it) }
+
+    fun openConflictOriginal() {
+        val orig = edConflictOf ?: return
+        if (File(Vault.dir(ctx), orig).exists()) openPath(orig)
+    }
+
+    /** keep = phone version (copy replaces the original), else server version (copy is deleted). */
+    fun resolveConflict(keep: Boolean) {
+        saveEditor()
+        val copy = edPath ?: return
+        val orig = Conflicts.original(copy) ?: return
+        val root = Vault.dir(ctx)
+        val ok = if (keep) Conflicts.keepCopy(root, copy) != null else Conflicts.discardCopy(root, copy)
+        if (!ok) return
+        val msg = "Konflikt gelöst: ${titleOf(orig)} (" + (if (keep) "Handy-Version" else "Server-Version") + ")"
+        viewModelScope.launch {
+            GitSync.commit(ctx, msg)
+            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
+            SyncWorker.enqueue(ctx)
+        }
+        edPath = null
+        if (File(root, orig).exists()) openPath(orig) else { screen = returnTo; reload() }
+        if (conflictCount <= 1) showConflicts = false
     }
 
     fun deleteNote() {

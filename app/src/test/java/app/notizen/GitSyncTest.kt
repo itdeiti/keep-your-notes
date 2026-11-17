@@ -55,15 +55,31 @@ class GitSyncTest {
         write(mac, "inbox/Einkauf.md", "- [ ] Hafermilch\n- [ ] Brot\n- [ ] Käse\n")
         GitSync.syncRepo(mac, null, macId)
         write(phone, "inbox/Einkauf.md", "- [ ] Sojamilch\n- [ ] Brot\n- [ ] Käse\n")
-        GitSync.syncRepo(phone, null, phoneId)
+        val copies = GitSync.syncRepo(phone, null, phoneId)
 
         assertTrue(read(phone, "inbox/Einkauf.md").startsWith("- [ ] Hafermilch"))
         val copy = File(phone.repository.workTree, "inbox").listFiles()!!.single { "Konflikt Handy" in it.name }
         assertTrue(copy.readText().startsWith("- [ ] Sojamilch"))
         assertTrue(phone.status().call().isClean)
+        assertEquals(listOf("inbox/${copy.name}"), copies)
+        assertEquals("inbox/Einkauf.md", Conflicts.original(copies.single()))
 
         GitSync.syncRepo(mac, null, macId)
         assertTrue(File(mac.repository.workTree, "inbox/${copy.name}").exists())
+
+        // keep the phone version: copy replaces the original and disappears
+        val root = phone.repository.workTree
+        assertEquals("inbox/Einkauf.md", Conflicts.keepCopy(root, copies.single()))
+        assertTrue(read(phone, "inbox/Einkauf.md").startsWith("- [ ] Sojamilch"))
+        assertFalse(copy.exists())
+    }
+
+    @Test fun conflictCopyNames() {
+        assertTrue(Conflicts.isCopy("inbox/Einkauf (Konflikt Handy 2026-11-17 1432).md"))
+        assertEquals("Einkauf.md", Conflicts.original("Einkauf (Konflikt Handy 2026-11-17 1432).md"))
+        assertFalse(Conflicts.isCopy("inbox/Einkauf (Konflikt) .md"))
+        assertEquals(null, Conflicts.original("inbox/Einkauf.md"))
+        assertFalse(Conflicts.discardCopy(File("."), "inbox/Einkauf.md"))
     }
 
     @Test fun deletedOnMacEditedOnPhone() {

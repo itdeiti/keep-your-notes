@@ -95,16 +95,19 @@ object GitSync {
     suspend fun sync(ctx: Context) = locked {
         if (!isCloned(ctx)) return@locked
         try {
-            open(ctx).use { syncRepo(it, creds(ctx), ident(ctx)) }
-            Status.set(ctx, "Synchronisiert ${Status.now()}")
+            val copies = open(ctx).use { syncRepo(it, creds(ctx), ident(ctx)) }
+            Status.set(ctx, "Synchronisiert ${Status.now()}" + if (copies.isEmpty()) "" else " · ⚠ Konflikt")
+            Conflicts.notify(ctx, copies)
         } catch (e: Exception) {
             Status.set(ctx, "⚠ ${explain(e)} (${Status.now()})")
             throw e
         }
     }
 
-    internal fun syncRepo(git: Git, creds: CredentialsProvider?, id: PersonIdent) {
+    /** Returns the conflict copies this sync created (empty normally). */
+    internal fun syncRepo(git: Git, creds: CredentialsProvider?, id: PersonIdent): List<String> {
         val repo = git.repository
+        var copies = emptyList<String>()
         commitAll(git, id, "Handy: Änderungen")
         git.fetch().setRemote("origin").setCredentialsProvider(creds).call()
         val branch = repo.branch
@@ -116,7 +119,7 @@ object GitSync {
         } else if (remote != null) {
             val r = git.merge().include(remote).setMessage("Merge vom Server").call()
             when (r.mergeStatus) {
-                MergeStatus.CONFLICTING -> resolveConflicts(git, id, r.conflicts.keys, remote)
+                MergeStatus.CONFLICTING -> copies = resolveConflicts(git, id, r.conflicts.keys, remote)
                 MergeStatus.FAILED, MergeStatus.ABORTED, MergeStatus.CHECKOUT_CONFLICT,
                 MergeStatus.NOT_SUPPORTED ->
                     error("Merge fehlgeschlagen (${r.mergeStatus}) ${r.failingPaths?.keys ?: ""}")
@@ -124,11 +127,13 @@ object GitSync {
             }
         }
         if (repo.resolve(Constants.HEAD) != null) push(git, creds, branch)
+        return copies
     }
 
     /** Server version stays in place; the phone's version becomes a conflict copy next to it. */
-    private fun resolveConflicts(git: Git, id: PersonIdent, paths: Set<String>, theirs: ObjectId) {
+    private fun resolveConflicts(git: Git, id: PersonIdent, paths: Set<String>, theirs: ObjectId): List<String> {
         val repo = git.repository
+        val copies = mutableListOf<String>()
         val ours = repo.resolve(Constants.HEAD)
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HHmm"))
         for (p in paths) {
@@ -141,12 +146,14 @@ object GitSync {
                 val base = if (ext.isEmpty()) p else p.removeSuffix(".$ext")
                 val copy = "$base (Konflikt Handy $stamp)" + if (ext.isEmpty()) "" else ".$ext"
                 File(repo.workTree, copy).apply { parentFile?.mkdirs() }.writeBytes(o)
+                copies += copy
             }
         }
         git.add().addFilepattern(".").call()
         git.add().addFilepattern(".").setUpdate(true).call()
         git.commit().setMessage("Merge mit Konflikt: ${paths.joinToString()}")
             .setAuthor(id).setCommitter(id).call()
+        return copies
     }
 
     private fun blob(repo: Repository, commit: ObjectId?, path: String): ByteArray? {
