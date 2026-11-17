@@ -107,17 +107,24 @@ object Reminders {
         }
     }
 
-    /** "Erledigt" from the notification: tick the line, commit, push later. */
-    suspend fun complete(ctx: Context, path: String, line: String) {
+    /** "Erledigt" from the notification. */
+    suspend fun complete(ctx: Context, path: String, line: String) = toggle(ctx, path, line, onlyOpen = true)
+
+    /** Tick or untick the task [line] in [path], commit, push later, refresh alarms and widget. */
+    suspend fun toggle(ctx: Context, path: String, line: String, onlyOpen: Boolean = false) {
         val f = File(Vault.dir(ctx), path)
         if (!f.exists()) return
         val text = f.readText()
         val idx = text.split("\n").indexOfFirst { it.trimEnd('\r') == line }
         if (idx < 0) return
+        val open = Markdown.TASK.find(line)?.groupValues?.get(2) == " "
+        if (onlyOpen && !open) return
         f.writeText(Markdown.toggleTaskLine(text, idx))
-        GitSync.commit(ctx, "Erledigt: ${Markdown.stripTaskMeta(line.substringAfter("] "))}")
+        val what = Markdown.stripTaskMeta(line.substringAfter("] "))
+        GitSync.commit(ctx, (if (open) "Erledigt: " else "Wieder offen: ") + what)
         SyncWorker.enqueue(ctx)
         rescan(ctx)
+        NotesWidget.refresh(ctx)
     }
 }
 

@@ -1,0 +1,27 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wc_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="32dp"
+    android:orientation="horizontal"
+    android:paddingStart="2dp"
+    android:paddingEnd="12dp">
+
+    <CheckBox
+        android:id="@+id/wc_check"
+        android:layout_width="40dp"
+        android:layout_height="32dp"
+        android:buttonTint="@color/widget_item_fg" />
+
+    <TextView
+        android:id="@+id/wc_text"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="@color/widget_item_fg"
+        android:textSize="13sp" />
+</LinearLayout>
