@@ -15,6 +15,8 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -121,12 +123,15 @@ fun ListScreen(vm: AppVM) {
         .filter { tq.isNullOrEmpty() || it.contains(tq) }
         .let { l -> vm.tag?.let { sel -> listOf(sel) + (l - sel) } ?: l }
     var pickTag by remember { mutableStateOf(false) }
+    var showFolders by remember { mutableStateOf(false) }
+    if (showFolders) FolderDialog(vm) { showFolders = false }
     if (pickTag) TagFilterPicker(counts, onPick = { vm.tag = it; vm.query = ""; pickTag = false }) { pickTag = false }
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Notizen") },
                 actions = {
+                    TextButton(onClick = { showFolders = true }) { Text("📁", style = MaterialTheme.typography.titleMedium) }
                     if (vm.busy) CircularProgressIndicator(Modifier.padding(12.dp).size(20.dp), strokeWidth = 2.dp)
                     else IconButton(onClick = { vm.sync() }) { Icon(Icons.Default.Refresh, "Synchronisieren") }
                     IconButton(onClick = { vm.screen = Screen.Settings }) { Icon(Icons.Default.Settings, "Einstellungen") }
@@ -145,6 +150,13 @@ fun ListScreen(vm: AppVM) {
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 singleLine = true, shape = RoundedCornerShape(28.dp),
             )
+            vm.folderFilter?.let { f ->
+                InputChip(
+                    selected = true, onClick = { vm.folderFilter = null },
+                    label = { Text("📁 $f") }, trailingIcon = { Text("×") },
+                    modifier = Modifier.padding(horizontal = 12.dp),
+                )
+            }
             if (counts.isNotEmpty()) LazyRow(
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -327,6 +339,8 @@ fun EditorScreen(vm: AppVM) {
             if (!vm.edPreview) Surface(tonalElevation = 3.dp) {
                 Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
                     Tool("☑") { vm.edBody = Markdown.toggleTask(vm.edBody) }
+                    Tool("⇥") { vm.edBody = Markdown.indent(vm.edBody) }
+                    Tool("⇤") { vm.edBody = Markdown.indent(vm.edBody, outdent = true) }
                     Tool("📅") { pickDue() }
                     Tool("🎤") { dictate() }
                     Tool("B", bold = true) { vm.edBody = Markdown.wrap(vm.edBody, "**") }
@@ -335,6 +349,7 @@ fun EditorScreen(vm: AppVM) {
                     Tool("H") { vm.edBody = Markdown.cycleHeading(vm.edBody) }
                     Tool("•") { vm.edBody = Markdown.toggleBullet(vm.edBody) }
                     Tool("🔗") { vm.edBody = Markdown.link(vm.edBody) }
+                    Tool("▦") { vm.edBody = Markdown.table(vm.edBody) }
                 }
             }
         }
@@ -477,6 +492,81 @@ private fun AddPropDialog(onAdd: (String, String) -> Unit, onDismiss: () -> Unit
     )
 }
 
+/** Folder overview: tap filters the list, "Verschieben" moves a folder with everything in it. */
+@Composable
+private fun FolderDialog(vm: AppVM, onDone: () -> Unit) {
+    val counts = remember(vm.notes) { vm.folderCounts() }
+    var moving by remember { mutableStateOf<String?>(null) }
+    val para = Vault.PARA_FOLDERS
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("Ordner") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                item {
+                    Text("Alle Notizen", Modifier.fillMaxWidth().clickable { vm.folderFilter = null; onDone() }.padding(vertical = 10.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (vm.folderFilter == null) FontWeight.Bold else FontWeight.Normal)
+                }
+                items(counts) { (f, n) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { vm.folderFilter = f; onDone() }
+                            .padding(start = (f.count { it == '/' } * 20).dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("📁 " + f.substringAfterLast('/'), Modifier.weight(1f).padding(vertical = 10.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (vm.folderFilter == f) FontWeight.Bold else FontWeight.Normal)
+                        Text("$n", color = MaterialTheme.colorScheme.outline)
+                        if (f !in para) TextButton(onClick = { moving = f }) { Text("Verschieben") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDone) { Text("Schließen") } },
+    )
+    moving?.let { src ->
+        FolderTargetDialog(vm, src, onDone = { moving = null })
+    }
+}
+
+@Composable
+private fun FolderTargetDialog(vm: AppVM, src: String, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val targets = remember { listOf("") + vm.folders().filter { it != src && !it.startsWith("$src/") && it != src.substringBeforeLast('/', "") } }
+    var custom by remember { mutableStateOf("") }
+    fun go(parent: String) {
+        if (!vm.moveFolder(src, parent)) Toast.makeText(ctx, "Geht nicht", Toast.LENGTH_SHORT).show()
+        onDone()
+    }
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("„${src.substringAfterLast('/')}“ verschieben nach") },
+        text = {
+            Column {
+                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                    items(targets) { f ->
+                        Text(
+                            if (f.isEmpty()) "📁 / (oberste Ebene)" else "📁 " + f.substringAfterLast('/'),
+                            Modifier.fillMaxWidth().clickable { go(f) }
+                                .padding(start = (if (f.isEmpty()) 0 else (f.count { it == '/' } * 20)).dp, top = 10.dp, bottom = 10.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    custom, { custom = it }, singleLine = true, modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    label = { Text("Neuer Zielordner") }, placeholder = { Text("z.B. archiv/2026") },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { go(custom) }, enabled = Vault.cleanFolder(custom).isNotEmpty()) { Text("Dorthin") }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text("Abbrechen") } },
+    )
+}
+
 /** Searchable list of all tags with counts; tap filters the note list. */
 @Composable
 private fun TagFilterPicker(counts: List<Pair<String, Int>>, onPick: (String) -> Unit, onDismiss: () -> Unit) {
@@ -584,17 +674,60 @@ private fun Tool(label: String, bold: Boolean = false, italic: Boolean = false, 
     }
 }
 
+/** Markdown table: header bold, equal columns, cells wrap; separator row is skipped. */
+@Composable
+private fun MdTable(rows: List<String>, c: MdColors, modifier: Modifier) {
+    val data = rows.filterIndexed { i, _ -> i != 1 }.map { Markdown.cells(it) }
+    val cols = data.maxOf { it.size }
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Column(modifier.border(1.dp, line, RoundedCornerShape(6.dp))) {
+        data.forEachIndexed { r, cells ->
+            if (r > 0) HorizontalDivider(color = line)
+            Row(Modifier.fillMaxWidth().then(if (r == 0) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier)) {
+                for (ci in 0 until cols) {
+                    Text(
+                        Markdown.render(cells.getOrElse(ci) { "" }, c),
+                        Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (r == 0) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** Read view: rendered lines, tappable checkboxes. */
 @Composable
 private fun MarkdownView(body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, modifier: Modifier) {
     val base = MaterialTheme.typography.bodyLarge
+    val lines = body.split("\n")
+    // table blocks: header row followed by a |---| separator
+    val tableAt = mutableMapOf<Int, Int>() // start line -> end (exclusive)
+    var k = 0
+    while (k < lines.size) {
+        if (Markdown.isTableRow(lines[k]) && k + 1 < lines.size && Markdown.TABLE_SEP.matches(lines[k + 1])) {
+            var e = k + 2
+            while (e < lines.size && Markdown.isTableRow(lines[e])) e++
+            tableAt[k] = e; k = e
+        } else k++
+    }
     Column(modifier) {
-        body.split("\n").forEachIndexed { i, line ->
+        var skipUntil = -1
+        lines.forEachIndexed { i, line ->
+          if (i < skipUntil) return@forEachIndexed
+          val tableEnd = tableAt[i]
+          if (tableEnd != null) {
+              skipUntil = tableEnd
+              MdTable(lines.subList(i, tableEnd), c, Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { onEdit(tableEnd - 1) })
+              return@forEachIndexed
+          }
           Box(Modifier.fillMaxWidth().clickable { onEdit(i) }) {
             val task = Markdown.TASK.find(line)
             val head = Markdown.HEADING.find(line)
             val bullet = Markdown.BULLET.find(line)
-            val indent = (line.length - line.trimStart().length).coerceAtMost(12) * 6
+            val lead = line.takeWhile { it == ' ' || it == '\t' }
+            val indent = (lead.count { it == ' ' } + lead.count { it == '\t' } * 4).coerceAtMost(16) * 6
             when {
                 task != null -> Row(Modifier.padding(start = indent.dp), verticalAlignment = Alignment.CenterVertically) {
                     val done = task.groupValues[2] != " "

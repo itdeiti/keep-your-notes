@@ -157,3 +157,53 @@ class FolderTest {
         root.deleteRecursively()
     }
 }
+
+class IndentTableTest {
+    @Test fun indentAndOutdentLineAndSelection() {
+        val v = androidx.compose.ui.text.input.TextFieldValue("- a\n- b\n- c", androidx.compose.ui.text.TextRange(5))
+        val r = Markdown.indent(v)
+        assertEquals("- a\n\t- b\n- c", r.text)
+        assertEquals(androidx.compose.ui.text.TextRange(6), r.selection)
+        assertEquals("- a\n- b\n- c", Markdown.indent(r, outdent = true).text)
+        val sel = androidx.compose.ui.text.input.TextFieldValue("- a\n- b\n- c", androidx.compose.ui.text.TextRange(1, 9))
+        assertEquals("\t- a\n\t- b\n\t- c", Markdown.indent(sel).text)
+        assertEquals("- a", Markdown.indent(androidx.compose.ui.text.input.TextFieldValue("    - a"), outdent = true).text)
+    }
+
+    @Test fun enterOnEmptyNestedItemOutdents() {
+        val before = "- a\n\t- "
+        val old = androidx.compose.ui.text.input.TextFieldValue(before, androidx.compose.ui.text.TextRange(before.length))
+        val new = androidx.compose.ui.text.input.TextFieldValue(before + "\n", androidx.compose.ui.text.TextRange(before.length + 1))
+        assertEquals("- a\n- ", Markdown.continueList(old, new).text)
+    }
+
+    @Test fun tableHelpers() {
+        assertTrue(Markdown.TABLE_SEP.matches("| --- | :---: |"))
+        assertTrue(Markdown.TABLE_SEP.matches("---|---"))
+        assertFalse(Markdown.TABLE_SEP.matches("| a | b |"))
+        assertEquals(listOf("a", "b | c", ""), Markdown.cells("| a | b \\| c |  |"))
+        val t = Markdown.table(androidx.compose.ui.text.input.TextFieldValue("x", androidx.compose.ui.text.TextRange(1)))
+        assertEquals("x\n| Spalte 1 | Spalte 2 |\n| --- | --- |\n|  |  |\n", t.text)
+        assertEquals("Spalte 1", t.text.substring(t.selection.min, t.selection.max))
+    }
+
+    @Test fun moveFolderRules() {
+        val root = kotlin.io.path.createTempDirectory().toFile()
+        listOf("projekte/umzug", "archiv", "wissen/kochen").forEach { java.io.File(root, it).mkdirs() }
+        java.io.File(root, "projekte/umzug/Liste.md").writeText("x")
+        assertEquals("archiv/umzug", Vault.moveFolder(root, "projekte/umzug", "archiv"))
+        assertTrue(java.io.File(root, "archiv/umzug/Liste.md").exists())
+        assertEquals(null, Vault.moveFolder(root, "projekte", "archiv"))          // PARA root stays
+        assertEquals(null, Vault.moveFolder(root, "archiv/umzug", "archiv/umzug")) // into itself
+        assertEquals("kochen", Vault.moveFolder(root, "wissen/kochen", ""))        // to top level
+        java.io.File(root, "wissen/kochen").mkdirs()
+        assertEquals("kochen 2", Vault.moveFolder(root, "wissen/kochen", ""))      // name taken
+        root.deleteRecursively()
+    }
+
+    @Test fun folderFilterIncludesSubfolders() {
+        val ns = listOf(Note("projekte/a.md", emptyList(), "", 2), Note("projekte/umzug/b.md", emptyList(), "", 1), Note("wissen/c.md", emptyList(), "", 0))
+        assertEquals(listOf("a", "b"), filterNotes(ns, null, "", "projekte").map { it.title })
+        assertEquals(listOf("b"), filterNotes(ns, null, "", "projekte/umzug").map { it.title })
+    }
+}

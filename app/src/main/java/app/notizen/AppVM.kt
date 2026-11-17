@@ -25,6 +25,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     var notes by mutableStateOf(listOf<Note>())
     var query by mutableStateOf("")
     var tag by mutableStateOf<String?>(null)
+    var folderFilter by mutableStateOf<String?>(null)
     var status by mutableStateOf("")
     var busy by mutableStateOf(false)
     var tick by mutableIntStateOf(0)
@@ -55,7 +56,26 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     /** "#ko" in the search field filters by tags containing "ko"; anything else searches title and text. */
     val tagQuery: String? get() = query.trim().takeIf { it.startsWith("#") }?.let { cleanTag(it) }
 
-    fun filtered(): List<Note> = filterNotes(notes, tag, query)
+    fun filtered(): List<Note> = filterNotes(notes, tag, query, folderFilter)
+
+    /** Folder -> number of notes in it and below. */
+    fun folderCounts(): List<Pair<String, Int>> {
+        val folders = Vault.folders(Vault.dir(ctx))
+        return folders.map { f -> f to notes.count { it.folder == f || it.folder.startsWith("$f/") } }
+    }
+
+    /** Move a whole folder into [parent]; returns false if not allowed. */
+    fun moveFolder(src: String, parent: String): Boolean {
+        val target = Vault.moveFolder(Vault.dir(ctx), src, parent) ?: return false
+        if (folderFilter == src) folderFilter = target
+        viewModelScope.launch {
+            GitSync.commit(ctx, "Ordner verschoben: $src -> $target")
+            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
+            SyncWorker.enqueue(ctx)
+            reload()
+        }
+        return true
+    }
 
     /** All tags with how many notes use them, most used first. */
     fun tagCounts(): List<Pair<String, Int>> = notes.flatMap { it.tags }.groupingBy { it }.eachCount()

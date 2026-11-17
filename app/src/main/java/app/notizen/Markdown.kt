@@ -135,7 +135,7 @@ object Markdown {
         var n = 0
         var first = true
         for (raw in body.split("\n")) {
-            if (raw.isBlank() || n >= maxLines) continue
+            if (raw.isBlank() || n >= maxLines || TABLE_SEP.matches(raw)) continue
             if (first) {
                 first = false
                 val plain = stripTaskMeta(raw.replace(LIST, "").trimStart('#', '>', ' '))
@@ -157,6 +157,7 @@ object Markdown {
                     append(render(raw.substring(head.value.length), c, false))
                 }
                 bullet != null -> { append("• "); append(render(raw.substring(bullet.value.length), c, false)) }
+                isTableRow(raw) -> append(render(cells(raw).filter { it.isNotEmpty() }.joinToString("  ·  "), c, false))
                 raw.startsWith(">") -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
                     append(render(raw.removePrefix(">").trimStart(), c, false))
                 }
@@ -221,6 +222,45 @@ object Markdown {
         when (it) { "# " -> "## "; "## " -> "### "; "### " -> ""; else -> "# " }
     }
 
+    private fun outdentLine(l: String) = when {
+        l.startsWith("\t") -> l.substring(1)
+        else -> l.substring(l.takeWhile { it == ' ' }.length.coerceAtMost(4))
+    }
+
+    /** Indent (tab, like Obsidian) or outdent every line touched by the selection; the selection moves along. */
+    fun indent(v: TextFieldValue, outdent: Boolean = false): TextFieldValue {
+        val t = v.text
+        val start = lineStart(t, v.selection.min)
+        val end = lineEnd(t, maxOf(v.selection.max, start))
+        val lines = t.substring(start, end).split("\n")
+        val changed = lines.map { if (outdent) outdentLine(it) else "\t" + it }
+        val deltaFirst = changed.first().length - lines.first().length
+        val deltaAll = changed.sumOf { it.length } - lines.sumOf { it.length }
+        val nt = t.substring(0, start) + changed.joinToString("\n") + t.substring(end)
+        val a = (v.selection.min + deltaFirst).coerceAtLeast(start)
+        val b = (v.selection.max + deltaAll).coerceAtLeast(a)
+        return TextFieldValue(nt, if (v.selection.collapsed) TextRange(a) else TextRange(a, b))
+    }
+
+    /** Insert an empty 2x2 table on its own lines. */
+    fun table(v: TextFieldValue): TextFieldValue {
+        val t = v.text
+        val at = v.selection.min
+        val before = if (at > 0 && t[at - 1] != '\n') "\n" else ""
+        val tpl = "| Spalte 1 | Spalte 2 |\n| --- | --- |\n|  |  |\n"
+        val nt = t.substring(0, at) + before + tpl + t.substring(at)
+        return TextFieldValue(nt, TextRange(at + before.length + 2, at + before.length + 10)) // selects "Spalte 1"
+    }
+
+    // ---------- tables ----------
+
+    val TABLE_SEP = Regex("""^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$""")
+
+    fun isTableRow(l: String) = l.trimStart().startsWith("|")
+
+    fun cells(l: String): List<String> =
+        l.trim().removePrefix("|").removeSuffix("|").split(Regex("""(?<!\\)\|""")).map { it.trim().replace("\\|", "|") }
+
     /** Enter in a list continues it; Enter on an empty item ends the list. */
     fun continueList(old: TextFieldValue, new: TextFieldValue): TextFieldValue {
         if (new.text.length != old.text.length + 1 || !new.selection.collapsed) return new
@@ -231,6 +271,12 @@ object Markdown {
         val prev = t.substring(ls, p - 1)
         val m = LIST.find(prev) ?: return new
         if (prev.substring(m.value.length).isBlank()) {
+            val indent = m.groupValues[1]
+            if (indent.isNotEmpty()) { // empty nested item: go one level up instead of ending the list
+                val line = outdentLine(prev)
+                val nt = t.substring(0, ls) + line + t.substring(p)
+                return TextFieldValue(nt, TextRange(ls + line.length))
+            }
             return TextFieldValue(t.substring(0, ls) + t.substring(p), TextRange(ls))
         }
         val marker = m.groupValues[2]

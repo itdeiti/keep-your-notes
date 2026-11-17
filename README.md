@@ -12,6 +12,9 @@ Small Android app that replaces Google Keep and keeps every note as a Markdown f
   - Share a page from the browser → the app downloads it, keeps the article (Readability, Firefox reader mode) and converts it to Markdown: headings, lists, links, quotes, code, tables, images as remote links.
   - Select text, then "Teilen" in Chrome → quote plus link back to the highlighted passage.
   - Select text in any app → "Als Notiz" in the selection menu.
+- Folders: 📁 in the list opens all folders with note counts; tap filters the list (subfolders included), "Verschieben" moves a folder with everything in it (not the five PARA root folders).
+- Nested lists: ⇥ / ⇤ in the toolbar indent or outdent the current or selected lines (tab, like Obsidian); Enter on an empty nested item goes one level up.
+- Tables: Markdown tables render as a grid in the read view (bold header) and as rows in cards; ▦ inserts a 2×2 table.
 - Move: the folder chip next to "Eigenschaften" (e.g. `📁 projekte`) opens all vault folders (PARA folders first, subfolders indented) or creates a new one like `projekte/umzug-2027`; the move is committed and synced, reminders and widget follow.
 - Properties ("Eigenschaften", collapsed under the title): every frontmatter field except `tags`/`pinned`, editable inline, × removes, "＋ Eigenschaft" adds text or date. Date fields (value starts with YYYY-MM-DD or key like `due`, `datum`, `created`) open a date picker and store `YYYY-MM-DD`; an existing time part (`created: 2026-11-17T14:32`) is kept. New notes get `created:` with date and time.
 - Tags: chips under the title; × removes, ＋ picks an existing tag or creates a new one (`tags: [a, b]` in the frontmatter).

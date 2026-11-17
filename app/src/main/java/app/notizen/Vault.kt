@@ -40,10 +40,11 @@ fun withTags(front: List<String>, tags: List<String>): List<String> {
 }
 
 /** List filter: selected [tag], plus "#abc" in [query] = tags containing "abc", else full-text search. Pinned first, newest first. */
-fun filterNotes(notes: List<Note>, tag: String?, query: String): List<Note> {
+fun filterNotes(notes: List<Note>, tag: String?, query: String, folder: String? = null): List<Note> {
     val q = query.trim()
     val tq = q.takeIf { it.startsWith("#") }?.let { cleanTag(it) }
     return notes.filter { n ->
+        (folder == null || n.folder == folder || n.folder.startsWith("$folder/")) &&
         (tag == null || tag in n.tags) && when {
             tq != null -> tq.isEmpty() || n.tags.any { it.contains(tq) }
             else -> q.isEmpty() || n.title.contains(q, true) || n.body.contains(q, true)
@@ -155,6 +156,26 @@ object Vault {
     /** "Projekte / Umzug 2027/" -> "Projekte/Umzug 2027"; no dot folders, no "..". */
     fun cleanFolder(raw: String) = raw.split('/').map { it.trim().replace(Regex("""[\\:*?"<>|]"""), "") }
         .filter { it.isNotEmpty() && !it.startsWith(".") }.joinToString("/")
+
+    val PARA_FOLDERS get() = PARA
+
+    /**
+     * Move folder [src] (with everything in it) into [parent] ("" = vault root).
+     * Returns the new path, or null if not allowed (PARA root folders, into itself) or failed.
+     */
+    fun moveFolder(root: File, src: String, parent: String): String? {
+        val s = cleanFolder(src)
+        val p = cleanFolder(parent)
+        if (s.isEmpty() || s in PARA) return null
+        if (p == s || p.startsWith("$s/")) return null
+        val name = s.substringAfterLast('/')
+        var target = if (p.isEmpty()) name else "$p/$name"
+        if (target == s) return null
+        var n = 2
+        while (File(root, target).exists()) target = (if (p.isEmpty()) "" else "$p/") + "$name ${n++}"
+        File(root, target).parentFile?.mkdirs()
+        return if (File(root, s).renameTo(File(root, target))) target else null
+    }
 
     fun read(root: File, f: File): Note {
         val (front, body) = parse(f.readText())
