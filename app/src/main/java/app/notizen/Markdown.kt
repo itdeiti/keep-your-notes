@@ -138,7 +138,8 @@ object Markdown {
             if (raw.isBlank() || n >= maxLines) continue
             if (first) {
                 first = false
-                if (raw.trimStart('#', ' ').trim().equals(title.trim(), ignoreCase = true)) continue
+                val plain = stripTaskMeta(raw.replace(LIST, "").trimStart('#', '>', ' '))
+                if (plain.equals(title.trim(), ignoreCase = true)) continue
             }
             if (n > 0) append("\n")
             val task = TASK.find(raw)
@@ -156,6 +157,9 @@ object Markdown {
                     append(render(raw.substring(head.value.length), c, false))
                 }
                 bullet != null -> { append("• "); append(render(raw.substring(bullet.value.length), c, false)) }
+                raw.startsWith(">") -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                    append(render(raw.removePrefix(">").trimStart(), c, false))
+                }
                 else -> append(render(raw, c, false))
             }
             n++
@@ -239,18 +243,28 @@ object Markdown {
         return TextFieldValue(t.substring(0, p) + ins + t.substring(p), TextRange(p + ins.length))
     }
 
-    /** Make the current line a task with due date (📅) and optional reminder (⏰), Obsidian Tasks/Reminder format. */
+    /**
+     * Make the current line a task with due date (📅) and optional reminder (⏰), Obsidian Tasks/Reminder format.
+     * The cursor ends after the task text, before the dates, so typing continues the description.
+     */
     fun setDue(v: TextFieldValue, date: LocalDate, time: LocalTime?): TextFieldValue {
         val t = v.text
         val ls = lineStart(t, v.selection.min)
         val le = lineEnd(t, ls)
-        var line = t.substring(ls, le).replace(Regex("""\s*(📅|⏰) ?\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?"""), "").trimEnd()
-        if (!TASK.containsMatchIn(line)) {
-            val m = LIST.find(line)
-            line = if (m != null) m.groupValues[1] + "- [ ] " + line.substring(m.value.length) else "- [ ] $line"
+        val raw = t.substring(ls, le)
+        val task = Regex("""^(\s*[-*+] \[( |x|X)\])\s?""").find(raw)
+        val list = if (task == null) LIST.find(raw) else null
+        val prefix = when {
+            task != null -> task.groupValues[1] + " "
+            list != null -> list.groupValues[1] + "- [ ] "
+            else -> "- [ ] "
         }
-        line += " 📅 $date" + (time?.let { " ⏰ $date $it" } ?: "")
-        return TextFieldValue(t.substring(0, ls) + line + t.substring(le), TextRange(ls + line.length))
+        val rest = raw.substring(task?.value?.length ?: list?.value?.length ?: 0)
+        val text = rest.replace(Regex("""\s*(📅|⏰) ?\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?"""), "").trim()
+        val meta = "📅 $date" + (time?.let { " ⏰ $date $it" } ?: "")
+        val line = prefix + text + " " + meta
+        val cursor = ls + prefix.length + text.length
+        return TextFieldValue(t.substring(0, ls) + line + t.substring(le), TextRange(cursor))
     }
 
     /** Tick or untick task in line [i]; ticking adds "✅ date" like the Tasks plugin. */

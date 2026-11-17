@@ -285,8 +285,9 @@ fun EditorScreen(vm: AppVM) {
                     MarkdownView(
                         vm.edBody.text, c,
                         onToggle = { vm.toggleTask(it) },
+                        onEdit = { vm.editAt(it) },
                         modifier = Modifier.fillMaxSize()
-                            .clickable { vm.edPreview = false; vm.edKey++ }
+                            .clickable { vm.editAt(null) }
                             .verticalScroll(rememberScrollState())
                             .padding(16.dp),
                     )
@@ -341,10 +342,11 @@ private fun Tool(label: String, bold: Boolean = false, italic: Boolean = false, 
 
 /** Read view: rendered lines, tappable checkboxes. */
 @Composable
-private fun MarkdownView(body: String, c: MdColors, onToggle: (Int) -> Unit, modifier: Modifier) {
+private fun MarkdownView(body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, modifier: Modifier) {
     val base = MaterialTheme.typography.bodyLarge
     Column(modifier) {
         body.split("\n").forEachIndexed { i, line ->
+          Box(Modifier.fillMaxWidth().clickable { onEdit(i) }) {
             val task = Markdown.TASK.find(line)
             val head = Markdown.HEADING.find(line)
             val bullet = Markdown.BULLET.find(line)
@@ -382,6 +384,7 @@ private fun MarkdownView(body: String, c: MdColors, onToggle: (Int) -> Unit, mod
                 line.isBlank() -> Spacer(Modifier.height(10.dp))
                 else -> Text(Markdown.render(line, c), style = base)
             }
+          }
         }
     }
 }

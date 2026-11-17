@@ -62,7 +62,9 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     fun reload() {
         viewModelScope.launch {
-            notes = withContext(Dispatchers.IO) { if (Environment.isExternalStorageManager()) Vault.all(ctx) else emptyList() }
+            notes = withContext(Dispatchers.IO) {
+                if (Environment.isExternalStorageManager()) Vault.all(ctx).also { NotesWidget.refresh(ctx) } else emptyList()
+            }
             status = Status.get(ctx)
         }
     }
@@ -120,33 +122,34 @@ class AppVM(app: Application) : AndroidViewModel(app) {
             )
             i.hasExtra("new") -> newNote(i.getStringExtra("new") ?: "note")
             i.hasExtra("open") -> openPath(i.getStringExtra("open")!!)
+            i.hasExtra("edit") -> openPath(i.getStringExtra("edit")!!, edit = true)
             else -> return
         }
         // Consume, so a configuration change does not replay it.
-        i.removeExtra("new"); i.removeExtra("open"); i.action = null
+        i.removeExtra("new"); i.removeExtra("open"); i.removeExtra("edit"); i.action = null
     }
 
     // ---------- editor ----------
 
     private fun snapshot() = edTitle + "\u0000" + Vault.serialize(edFront, edBody.text)
 
-    fun open(n: Note) {
+    fun open(n: Note, edit: Boolean = false) {
         saveEditor()
         edPath = n.path
         edTitle = n.title
         edFront = n.front
-        edBody = TextFieldValue(n.body)
-        edPreview = n.body.isNotBlank()
+        edBody = TextFieldValue(n.body, TextRange(n.body.trimEnd().length))
+        edPreview = !edit && n.body.isNotBlank()
         edSaved = snapshot()
         dictateOnOpen = false
         edKey++
         screen = Screen.Edit
     }
 
-    private fun openPath(path: String) {
+    private fun openPath(path: String, edit: Boolean = false) {
         val root = Vault.dir(ctx)
         val f = File(root, path)
-        if (f.exists()) open(Vault.read(root, f))
+        if (f.exists()) open(Vault.read(root, f), edit)
     }
 
     fun newNote(kind: String, text: String = "", title: String = "", folder: String = "inbox", front: List<String> = emptyList()) {
@@ -187,7 +190,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         val msg = "Notiz: ${titleOf(path)}"
         viewModelScope.launch {
             GitSync.commit(ctx, msg)
-            withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
+            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
             SyncWorker.enqueue(ctx)
         }
     }
@@ -251,6 +254,16 @@ class AppVM(app: Application) : AndroidViewModel(app) {
             }
         }
         reload()
+    }
+
+    /** Leave the read view with the cursor at the end of the tapped line (null = end of note). */
+    fun editAt(line: Int?) {
+        val t = edBody.text
+        val pos = if (line == null) t.trimEnd().length
+        else t.split("\n").take(line + 1).sumOf { it.length + 1 } - 1
+        edBody = edBody.copy(selection = TextRange(pos.coerceIn(0, t.length)))
+        edPreview = false
+        edKey++
     }
 
     fun togglePin() {

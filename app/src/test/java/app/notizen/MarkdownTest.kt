@@ -40,12 +40,38 @@ class MarkdownTest {
         val v = TextFieldValue("Zahnarzt anrufen", TextRange(3))
         val r = Markdown.setDue(v, LocalDate.of(2026, 11, 20), LocalTime.of(9, 30))
         assertEquals("- [ ] Zahnarzt anrufen 📅 2026-11-20 ⏰ 2026-11-20 09:30", r.text)
+        assertEquals(TextRange(22), r.selection)
     }
 
     @Test fun setDueReplacesOldDate() {
         val v = TextFieldValue("a\n- [ ] Steuer 📅 2026-01-01 ⏰ 2026-01-01 08:00\nb", TextRange(5))
         val r = Markdown.setDue(v, LocalDate.of(2026, 12, 1), null)
         assertEquals("a\n- [ ] Steuer 📅 2026-12-01\nb", r.text)
+        assertEquals(TextRange(14), r.selection) // after "Steuer"
+    }
+
+    @Test fun setDueOnEmptyCheckboxKeepsOneBoxAndCursorBeforeDate() {
+        val v = TextFieldValue("- [ ] ", TextRange(6))
+        val r = Markdown.setDue(v, LocalDate.of(2026, 11, 17), LocalTime.of(9, 0))
+        assertEquals("- [ ]  📅 2026-11-17 ⏰ 2026-11-17 09:00", r.text)
+        assertEquals(TextRange(6), r.selection)
+        // typing now lands between box and date
+        assertEquals("- [ ] Brot 📅 2026-11-17 ⏰ 2026-11-17 09:00", Markdown.insert(r, "Brot").text)
+    }
+
+    @Test fun setDueOnBulletTurnsItIntoTask() {
+        val r = Markdown.setDue(TextFieldValue("  - Milch", TextRange(3)), LocalDate.of(2026, 11, 17), null)
+        assertEquals("  - [ ] Milch 📅 2026-11-17", r.text)
+        assertEquals(TextRange(13), r.selection)
+    }
+
+    @Test fun checkboxOnEmptyLineCursorAfterBox() {
+        val r = Markdown.toggleTask(TextFieldValue("Brot\n", TextRange(5)))
+        assertEquals("Brot\n- [ ] ", r.text)
+        assertEquals(TextRange(11), r.selection)
+        val r2 = Markdown.toggleTask(TextFieldValue("Brot", TextRange(4)))
+        assertEquals("- [ ] Brot", r2.text)
+        assertEquals(TextRange(10), r2.selection)
     }
 
     @Test fun toggleTaskAddsAndRemovesDoneDate() {

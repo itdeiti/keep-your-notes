@@ -2,7 +2,7 @@
 
 Small Android app that replaces Google Keep and keeps every note as a Markdown file in an Obsidian vault, synced with Git.
 
-- Widget: quick note, checklist or dictation.
+- Widgets: "Schnellnotiz" (quick note, checklist, dictation) and "Notizliste" (Keep-style list of notes, pinned first; tap opens the note for editing).
 - List of the whole vault, newest first, pinned on top, search and tag filter.
 - Editor with Markdown highlighting, toolbar, list continuation, read view with tappable checkboxes.
 - Tasks with due date and reminder in the Obsidian Tasks/Reminder format:

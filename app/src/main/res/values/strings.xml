@@ -1,3 +1,4 @@
 <resources>
     <string name="widget_desc">Schnell eine Notiz, Liste oder Diktat anlegen</string>
+    <string name="widget_list_desc">Deine Notizen, Tippen öffnet zum Bearbeiten</string>
 </resources>
