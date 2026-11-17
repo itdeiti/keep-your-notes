@@ -159,7 +159,7 @@ class BootReceiver : BroadcastReceiver() {
         val app = ctx.applicationContext
         val pr = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            try { Reminders.rescan(app) } catch (_: Exception) {} finally { pr.finish() }
+            try { Reminders.rescan(app); NotesWidget.refresh(app) } catch (_: Exception) {} finally { pr.finish() }
         }
     }
 }
