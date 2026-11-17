@@ -1,0 +1,4 @@
+<resources>
+    <color name="widget_bg">@android:color/system_accent2_800</color>
+    <color name="widget_fg">@android:color/system_accent2_50</color>
+</resources>

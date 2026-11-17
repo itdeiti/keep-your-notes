@@ -1,0 +1,219 @@
+package app.notizen
+
+import android.app.Application
+import android.content.Intent
+import android.os.Environment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+
+enum class Screen { List, Edit, Settings }
+
+class AppVM(app: Application) : AndroidViewModel(app) {
+    private val ctx get() = getApplication<Application>()
+
+    var screen by mutableStateOf(Screen.List)
+    var notes by mutableStateOf(listOf<Note>())
+    var query by mutableStateOf("")
+    var tag by mutableStateOf<String?>(null)
+    var status by mutableStateOf("")
+    var busy by mutableStateOf(false)
+    var tick by mutableIntStateOf(0)
+
+    // editor
+    var edPath by mutableStateOf<String?>(null)
+    var edTitle by mutableStateOf("")
+    var edBody by mutableStateOf(TextFieldValue(""))
+    var edFront by mutableStateOf(listOf<String>())
+    var edPreview by mutableStateOf(false)
+    var edKey by mutableIntStateOf(0)
+    var dictateOnOpen by mutableStateOf(false)
+    private var edSaved = ""
+
+    val edPinned get() = isPinned(edFront)
+
+    init {
+        if (!ready()) screen = Screen.Settings
+        reload()
+    }
+
+    fun ready() = Prefs.load(ctx).repoUrl.isNotBlank() &&
+        Environment.isExternalStorageManager() && GitSync.isCloned(ctx)
+
+    fun filtered(): List<Note> {
+        val q = query.trim()
+        return notes.filter { n ->
+            (tag == null || tag in n.tags) &&
+                (q.isEmpty() || n.title.contains(q, true) || n.body.contains(q, true))
+        }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified })
+    }
+
+    fun reload() {
+        viewModelScope.launch {
+            notes = withContext(Dispatchers.IO) { if (Environment.isExternalStorageManager()) Vault.all(ctx) else emptyList() }
+            status = Status.get(ctx)
+        }
+    }
+
+    fun sync() {
+        if (busy || !ready()) return
+        viewModelScope.launch {
+            busy = true
+            try {
+                GitSync.sync(ctx)
+                withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
+            } catch (_: Exception) {
+                SyncWorker.enqueue(ctx) // retry when the network is back
+            } finally {
+                busy = false
+                reload()
+            }
+        }
+    }
+
+    fun onResume() {
+        tick++
+        if (ready() && screen != Screen.Edit) sync()
+    }
+
+    fun setup(p: Prefs, token: String) {
+        Prefs.save(ctx, p)
+        if (token.isNotBlank()) Secrets.put(ctx, token.trim())
+        viewModelScope.launch {
+            busy = true
+            Status.set(ctx, "Klone …")
+            status = Status.get(ctx)
+            try {
+                GitSync.cloneOrOpen(ctx)
+                GitSync.sync(ctx)
+                withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
+                screen = Screen.List
+            } catch (e: Exception) {
+                Status.set(ctx, "⚠ ${GitSync.explain(e)}")
+            } finally {
+                busy = false
+                reload()
+            }
+        }
+    }
+
+    fun handleIntent(i: Intent?) {
+        if (i == null || !ready()) return
+        when {
+            i.action == Intent.ACTION_SEND -> newNote(
+                "note",
+                text = i.getStringExtra(Intent.EXTRA_TEXT).orEmpty(),
+                title = i.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty(),
+            )
+            i.hasExtra("new") -> newNote(i.getStringExtra("new") ?: "note")
+            i.hasExtra("open") -> openPath(i.getStringExtra("open")!!)
+            else -> return
+        }
+        // Consume, so a configuration change does not replay it.
+        i.removeExtra("new"); i.removeExtra("open"); i.action = null
+    }
+
+    // ---------- editor ----------
+
+    private fun snapshot() = edTitle + "\u0000" + Vault.serialize(edFront, edBody.text)
+
+    fun open(n: Note) {
+        saveEditor()
+        edPath = n.path
+        edTitle = n.title
+        edFront = n.front
+        edBody = TextFieldValue(n.body)
+        edPreview = n.body.isNotBlank()
+        edSaved = snapshot()
+        dictateOnOpen = false
+        edKey++
+        screen = Screen.Edit
+    }
+
+    private fun openPath(path: String) {
+        val root = Vault.dir(ctx)
+        val f = File(root, path)
+        if (f.exists()) open(Vault.read(root, f))
+    }
+
+    fun newNote(kind: String, text: String = "", title: String = "") {
+        saveEditor()
+        edPath = null
+        edTitle = title
+        edFront = listOf("created: ${Vault.nowIso()}")
+        val body = if (kind == "list") "- [ ] " else text
+        edBody = TextFieldValue(body, TextRange(body.length))
+        edPreview = false
+        edSaved = if (text.isNotBlank()) "" else snapshot()
+        dictateOnOpen = kind == "dictate"
+        edKey++
+        screen = Screen.Edit
+    }
+
+    /** Write the file and commit locally; push happens in the background. */
+    fun saveEditor() {
+        if (screen != Screen.Edit || snapshot() == edSaved) return
+        val body = edBody.text
+        val title = edTitle.trim()
+        if (edPath == null && title.isBlank() && body.isBlank()) return
+        val root = Vault.dir(ctx)
+        var path = edPath
+        if (path == null) {
+            val first = body.lineSequence().map { Markdown.stripTaskMeta(it.replace(Markdown.LIST, "").trimStart('#', ' ')) }
+                .firstOrNull { it.isNotBlank() }.orEmpty().take(40)
+            path = Vault.uniquePath(root, "inbox", title.ifBlank { first })
+        } else if (title.isNotBlank() && title != titleOf(path)) {
+            val np = Vault.uniquePath(root, path.substringBeforeLast('/', ""), title)
+            if (File(root, path).renameTo(File(root, np))) path = np
+        }
+        Vault.write(root, path, edFront, body)
+        edPath = path
+        edTitle = titleOf(path)
+        edSaved = snapshot()
+        val msg = "Notiz: ${titleOf(path)}"
+        viewModelScope.launch {
+            GitSync.commit(ctx, msg)
+            withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
+            SyncWorker.enqueue(ctx)
+        }
+    }
+
+    fun closeEditor() {
+        saveEditor()
+        screen = Screen.List
+        reload()
+    }
+
+    fun deleteNote() {
+        val path = edPath
+        edPath = null; edTitle = ""; edBody = TextFieldValue("")
+        screen = Screen.List
+        if (path != null) {
+            File(Vault.dir(ctx), path).delete()
+            viewModelScope.launch {
+                GitSync.commit(ctx, "Gelöscht: ${titleOf(path)}")
+                withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
+                SyncWorker.enqueue(ctx)
+            }
+        }
+        reload()
+    }
+
+    fun togglePin() {
+        edFront = if (edPinned) edFront.filter { it.trim() != "pinned: true" } else edFront + "pinned: true"
+    }
+
+    fun toggleTask(line: Int) {
+        edBody = edBody.copy(text = Markdown.toggleTaskLine(edBody.text, line))
+        saveEditor()
+    }
+}
