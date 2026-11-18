@@ -3,7 +3,6 @@ package app.kyn
 import android.content.Context
 import android.os.SystemClock
 import android.util.Base64
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.core.app.NotificationCompat
 import androidx.compose.foundation.background
@@ -142,6 +141,7 @@ abstract class LockedActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         AppLock.onForeground(this)
+        SecretSession.onForeground(this)
         secure()
     }
 
@@ -153,11 +153,8 @@ abstract class LockedActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) AppLock.onBackground()
+        if (!isChangingConfigurations) { AppLock.onBackground(); SecretSession.onBackground() }
     }
 
-    private fun secure() {
-        if (AppLock.enabled(this)) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-    }
+    private fun secure() = SecretSession.secureWindow(this)
 }

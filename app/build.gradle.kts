@@ -101,6 +101,8 @@ dependencies {
     implementation("net.dankito.readability4j:readability4j:1.0.8")
     implementation("org.jsoup:jsoup:1.18.1") // newer than the 1.11 Readability4J pulls in
     testImplementation("junit:junit:4.13.2")
+    // real org.json for unit tests (android.jar only has stubs); used by MeldCrypto
+    testImplementation("org.json:json:20240303")
 }
 
 /**

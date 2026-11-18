@@ -1,0 +1,17 @@
+{
+  "version": "3.0",
+  "hint": "Pferd?",
+  "encodedData": "nGYJkqAvSQWNrIlcikmHF80oVhXZBu8ZhgLeNcTonL0Jyfn4UaeAIh5B/p+jNtkZx0U/8qLHmwRoS3+XVWfJAif9AXZqCdvy04sGD2yZi5JmO3w=",
+  "kdf": {
+    "name": "PBKDF2",
+    "hash": "SHA-512",
+    "iterations": 220000,
+    "salt": "CUBA0KO7iEDNNZ6FiSwjWw=="
+  },
+  "cipher": {
+    "name": "AES-GCM",
+    "keyLength": 256,
+    "iv": "L4BDvW/eThS4u/Ce",
+    "tagLength": 128
+  }
+}

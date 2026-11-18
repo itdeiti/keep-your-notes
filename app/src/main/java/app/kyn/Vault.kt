@@ -6,14 +6,23 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-data class Note(val path: String, val front: List<String>, val body: String, val modified: Long) {
+/**
+ * A note file. [encrypted] = Meld Encrypt file (.mdenc): listed by name only, with empty [front] and [body],
+ * so search, tags, tasks, reminders and widgets never see its content (see [SecretSession]).
+ */
+data class Note(val path: String, val front: List<String>, val body: String, val modified: Long, val encrypted: Boolean = false) {
     val title: String get() = titleOf(path)
     val folder: String get() = path.substringBeforeLast('/', "")
     val pinned: Boolean get() = isPinned(front)
     val tags: Set<String> get() = Markdown.tags(body) + frontTags(front)
 }
 
-fun titleOf(path: String) = path.substringAfterLast('/').removeSuffix(".md")
+fun titleOf(path: String) = path.substringAfterLast('/').let { n ->
+    val ext = n.substringAfterLast('.', "").lowercase()
+    if (ext == "md" || ext in MeldCrypto.EXTENSIONS) n.substringBeforeLast('.') else n
+}
+/** "inbox/Einkauf.md" -> "inbox/Einkauf" (also for .mdenc). */
+fun withoutExt(path: String) = path.substringBeforeLast('/', "").let { d -> (if (d.isEmpty()) "" else "$d/") + titleOf(path) }
 fun isPinned(front: List<String>) = front.any { it.trim() == "pinned: true" }
 
 fun frontTags(front: List<String>): Set<String> {
@@ -204,7 +213,7 @@ object Vault {
         if (!root.isDirectory) return emptyList()
         return root.walkTopDown()
             .onEnter { it == root || (!hidden(root, it) && !isLink(it)) }
-            .filter { it.isFile && it.extension == "md" && !isLink(it) }
+            .filter { it.isFile && (it.extension == "md" || MeldCrypto.isEncryptedFile(it.name)) && !isLink(it) }
             .mapNotNull { runCatching { read(root, it) }.getOrNull() }
             .toList()
     }
@@ -249,18 +258,21 @@ object Vault {
 
     /**
      * [path] as a note file inside [root], or null if it points elsewhere (`..`, absolute, dot folders,
-     * not Markdown). For paths that come from intents.
+     * not Markdown). For paths that come from intents. [encrypted] also allows .mdenc files: only for
+     * opening them read-only, never for callers that write.
      */
-    fun safeFile(root: File, path: String): File? {
+    fun safeFile(root: File, path: String, encrypted: Boolean = false): File? {
         val r = root.canonicalFile
         val f = File(r, path).canonicalFile
         val rel = f.relativeToOrNull(r)?.path ?: return null
-        if (rel.isEmpty() || rel.startsWith("..") || f.extension != "md") return null
+        val ok = f.extension == "md" || (encrypted && MeldCrypto.isEncryptedFile(f.name))
+        if (rel.isEmpty() || rel.startsWith("..") || !ok) return null
         if (rel.split(File.separatorChar).any { it.startsWith(".") }) return null
         return f
     }
 
     fun read(root: File, f: File): Note {
+        if (MeldCrypto.isEncryptedFile(f.name)) return Note(f.relativeTo(root).path, emptyList(), "", f.lastModified(), encrypted = true)
         val (front, body) = parse(f.readText())
         return Note(f.relativeTo(root).path, front, body, f.lastModified())
     }
@@ -277,6 +289,8 @@ object Vault {
         if (front.isEmpty()) body else "---\n${front.joinToString("\n")}\n---\n$body"
 
     fun write(root: File, path: String, front: List<String>, body: String) {
+        // kyn only reads encrypted notes: a write here would replace the ciphertext with plain text
+        require(!MeldCrypto.isEncryptedFile(path)) { "Not writing an encrypted note: $path" }
         val f = File(root, path)
         if (isLink(f)) error("Not writing through a symlink: $path")
         f.parentFile?.mkdirs()

@@ -131,4 +131,16 @@
     <string name="settings_missing_files">Dateizugriff</string>
     <string name="settings_missing_url">Notiz-Repo</string>
     <string name="settings_missing_token">Token</string>
+    <!-- verschlüsselte Notizen (Meld Encrypt), nur lesen -->
+    <string name="secret_password">Passwort</string>
+    <string name="secret_hint">Hinweis: %1$s</string>
+    <string name="secret_wrong">Falsches Passwort</string>
+    <string name="secret_unlock">Entsperren</string>
+    <string name="secret_lock">Sperren</string>
+    <string name="secret_locked_note">Diese Notiz ist verschlüsselt (Meld Encrypt).</string>
+    <string name="secret_read_only">Nur lesen · bearbeiten in Obsidian</string>
+    <string name="secret_unsupported">Dieses Format kann kyn nicht lesen. Öffne die Notiz einmal in Obsidian, es speichert sie im aktuellen Format.</string>
+    <string name="secret_inline_locked">Verschlüsselter Abschnitt · tippen zum Entsperren</string>
+    <string name="secret_inline_title">Verschlüsselter Abschnitt</string>
+    <string name="secret_inline_unsupported">🔐 Altes Format, in Obsidian öffnen zum Aktualisieren</string>
 </resources>

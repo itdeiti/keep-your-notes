@@ -147,4 +147,16 @@
     <string name="settings_missing_files">file access</string>
     <string name="settings_missing_url">notes repository</string>
     <string name="settings_missing_token">token</string>
+    <!-- encrypted notes (Meld Encrypt), read-only -->
+    <string name="secret_password">Password</string>
+    <string name="secret_hint">Hint: %1$s</string>
+    <string name="secret_wrong">Wrong password</string>
+    <string name="secret_unlock">Unlock</string>
+    <string name="secret_lock">Lock</string>
+    <string name="secret_locked_note">This note is encrypted (Meld Encrypt).</string>
+    <string name="secret_read_only">Read-only · edit in Obsidian</string>
+    <string name="secret_unsupported">kyn cannot read this format. Open the note in Obsidian once, it saves it in the current format.</string>
+    <string name="secret_inline_locked">Encrypted section · tap to unlock</string>
+    <string name="secret_inline_title">Encrypted section</string>
+    <string name="secret_inline_unsupported">🔐 Old format, open in Obsidian to update it</string>
 </resources>

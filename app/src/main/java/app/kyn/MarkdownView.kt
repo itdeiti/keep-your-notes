@@ -63,10 +63,15 @@ private fun MdTable(rows: List<String>, c: MdColors, onTap: () -> Unit, onLink: 
     }
 }
 
-/** Read view: rendered lines, tappable checkboxes. */
+/**
+ * Read view: rendered lines, tappable checkboxes. Lines with Meld Encrypt sections show them locked or
+ * decrypted ([SecretLine]); the decrypted text is only displayed, never put into [body].
+ * [readOnly]: checkboxes cannot be ticked (decrypted content cannot be written back).
+ */
 @Composable
 internal fun MarkdownView(
     body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, onLink: (String) -> Unit, modifier: Modifier,
+    readOnly: Boolean = false,
 ) {
     val base = MaterialTheme.typography.bodyLarge
     val lines = body.split("\n")
@@ -91,6 +96,11 @@ internal fun MarkdownView(
               MdTable(lines.subList(i, tableEnd), c, edit, onLink, Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = edit))
               return@forEachIndexed
           }
+          val secrets = MeldCrypto.findInline(line)
+          if (secrets.isNotEmpty()) {
+              SecretLine(line, secrets, c, onLink, Modifier.fillMaxWidth().padding(vertical = 4.dp))
+              return@forEachIndexed
+          }
           val edit = { onEdit(i) }
           Box(Modifier.fillMaxWidth().clickable(onClick = edit)) {
             val task = Markdown.TASK.find(line)
@@ -101,7 +111,7 @@ internal fun MarkdownView(
             when {
                 task != null -> Row(Modifier.padding(start = indent.dp), verticalAlignment = Alignment.CenterVertically) {
                     val done = task.groupValues[2] != " "
-                    Checkbox(checked = done, onCheckedChange = { onToggle(i) })
+                    Checkbox(checked = done, onCheckedChange = if (readOnly) null else { _ -> onToggle(i) })
                     MdText(
                         Markdown.render(line.substring(task.value.length), c),
                         base.copy(

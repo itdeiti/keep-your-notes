@@ -17,7 +17,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 
-enum class Screen { List, Tasks, Edit, Settings }
+enum class Screen { List, Tasks, Edit, Secret, Settings }
 
 class AppVM(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
@@ -49,6 +49,10 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     private var edMtime = 0L
 
     val edPinned get() = isPinned(edFront)
+
+    /** Encrypted note shown read-only on [Screen.Secret]; its plaintext lives only in [SecretSession]. */
+    var secretNote by mutableStateOf<Note?>(null)
+        private set
 
     /** Where the editor goes back to. */
     private var returnTo = Screen.List
@@ -276,6 +280,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     fun open(n: Note, edit: Boolean = false) {
         saveEditor()
+        if (n.encrypted) { openSecret(n); return }
         if (screen != Screen.Edit) returnTo = if (screen == Screen.Tasks) Screen.Tasks else Screen.List
         edPath = n.path
         edTitle = n.title
@@ -293,8 +298,8 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     fun openNote(name: String): Boolean {
         val key = name.trim().trimStart('/').lowercase()
         if (key.isEmpty()) return false
-        val n = notes.firstOrNull { it.path.removeSuffix(".md").lowercase() == key }
-            ?: notes.firstOrNull { it.path.removeSuffix(".md").lowercase().endsWith("/$key") }
+        val n = notes.firstOrNull { withoutExt(it.path).lowercase() == key }
+            ?: notes.firstOrNull { withoutExt(it.path).lowercase().endsWith("/$key") }
             ?: notes.firstOrNull { it.title.lowercase() == key.substringAfterLast('/') }
             ?: return false
         open(n)
@@ -304,7 +309,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     /** Paths come from intents (widget, notifications, but MainActivity is exported): only notes inside the vault. */
     private fun openPath(path: String, edit: Boolean = false) {
         val root = Vault.dir(ctx)
-        val f = Vault.safeFile(root, path) ?: return
+        val f = Vault.safeFile(root, path, encrypted = true) ?: return
         if (f.exists()) open(Vault.read(root.canonicalFile, f), edit)
     }
 
@@ -352,6 +357,26 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         edTitle = titleOf(path)
         edSaved = snapshot()
         afterChange(ctx.getString(R.string.commit_note, titleOf(path)))
+    }
+
+    // ---------- encrypted notes (read-only) ----------
+
+    private fun openSecret(n: Note) {
+        if (screen != Screen.Edit && screen != Screen.Secret) returnTo = if (screen == Screen.Tasks) Screen.Tasks else Screen.List
+        secretNote = n
+        screen = Screen.Secret
+    }
+
+    fun closeSecret() {
+        secretNote = null
+        screen = returnTo
+    }
+
+    /** Ciphertext of an encrypted note; throws [MeldCrypto.Unsupported] for formats kyn cannot read. */
+    suspend fun secretFile(n: Note): MeldCrypto.FileData = withContext(Dispatchers.IO) {
+        val root = Vault.dir(ctx)
+        val f = Vault.safeFile(root, n.path, encrypted = true) ?: throw MeldCrypto.Unsupported("?")
+        MeldCrypto.parseFile(f.readText())
     }
 
     /** Shared text or link → Markdown note in Clippings/. A bare link loads the whole page. */
