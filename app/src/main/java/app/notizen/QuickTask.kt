@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -67,21 +66,34 @@ object QuickTask {
     fun append(body: String, line: String): String =
         if (body.isBlank()) "$line\n" else body.trimEnd() + "\n" + line + "\n"
 
-    /** Write, commit, sync later, refresh alarms and widget. Blocking IO. */
-    suspend fun save(ctx: Context, text: String, date: LocalDate?, time: LocalTime?) {
+    private val fileLock = Any()
+
+    /**
+     * Only the file write: fast, so the dialog can close right away. Commit, alarms and widget
+     * follow in [afterWrite], off the UI path — a commit may wait minutes for a running sync
+     * (all git work shares one lock), which used to keep the widget dialog hanging.
+     */
+    fun write(ctx: Context, text: String, date: LocalDate?, time: LocalTime?): String {
         val root = Vault.dir(ctx)
-        val f = File(root, FILE)
         val l = line(text, date, time)
-        if (f.exists()) {
-            val (front, body) = Vault.parse(f.readText())
-            Vault.write(root, FILE, front, append(body, l))
-        } else {
-            Vault.write(root, FILE, listOf("created: ${Vault.nowIso()}"), append("", l))
+        synchronized(fileLock) {
+            val f = File(root, FILE)
+            if (f.exists()) {
+                val (front, body) = Vault.parse(f.readText())
+                Vault.write(root, FILE, front, append(body, l))
+            } else {
+                Vault.write(root, FILE, listOf("created: ${Vault.nowIso()}"), append("", l))
+            }
         }
-        GitSync.commit(ctx, "Aufgabe: " + Markdown.stripTaskMeta(l.removePrefix("- [ ] ")))
-        SyncWorker.enqueue(ctx)
-        Reminders.rescan(ctx)
-        NotesWidget.refresh(ctx)
+        return l
+    }
+
+    /** Alarm and widget first (no git lock needed), then commit and push. */
+    suspend fun afterWrite(ctx: Context, line: String) {
+        runCatching { Reminders.rescan(ctx) }
+        runCatching { NotesWidget.refresh(ctx) }
+        runCatching { GitSync.commit(ctx, "Aufgabe: " + Markdown.stripTaskMeta(line.removePrefix("- [ ] "))) }
+        SyncWorker.enqueue(ctx) // also commits the file if the commit above failed or the process died
     }
 
     fun confirmation(date: LocalDate?, time: LocalTime?): String = when {
@@ -114,10 +126,13 @@ class QuickTaskActivity : ComponentActivity() {
         if (saving) return
         saving = true
         val app = applicationContext
-        CoroutineScope(Dispatchers.Main).launch {
-            val ok = withContext(Dispatchers.IO) { runCatching { QuickTask.save(app, text, date, time) }.isSuccess }
-            Toast.makeText(app, if (ok) QuickTask.confirmation(date, time) else "Speichern fehlgeschlagen", Toast.LENGTH_SHORT).show()
-            finish()
+        App.scope.launch {
+            val line = runCatching { QuickTask.write(app, text, date, time) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                Toast.makeText(app, if (line != null) QuickTask.confirmation(date, time) else "Speichern fehlgeschlagen", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+            if (line != null) QuickTask.afterWrite(app, line)
         }
     }
 }

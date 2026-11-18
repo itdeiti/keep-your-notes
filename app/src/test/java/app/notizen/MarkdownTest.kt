@@ -1,5 +1,6 @@
 package app.notizen
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import org.junit.Assert.assertEquals
@@ -109,5 +110,47 @@ class MarkdownTest {
         assertEquals(listOf("created: 2026-11-17T10:00", "pinned: true"), withTags(f2, emptyList()))
         assertEquals("mein-tag", cleanTag(" #Mein Tag! "))
         assertEquals("haus/garten", cleanTag("Haus/Garten"))
+    }
+
+    // ---------- links in the read view ----------
+
+    private val colors = MdColors(Color.Gray, Color.Blue, Color.Green, Color.LightGray, Color.Gray)
+
+    private fun links(line: String) = Markdown.render(line, colors).let { r ->
+        r.getStringAnnotations(Markdown.LINK_TAG, 0, r.length).map { r.text.substring(it.start, it.end) to it.item }
+    }
+
+    @Test fun markdownLinkIsTappable() {
+        assertEquals(listOf("Seite" to "https://example.com/a"), links("siehe [Seite](https://example.com/a) hier"))
+        assertEquals("siehe Seite hier", Markdown.render("siehe [Seite](https://example.com/a) hier", colors).text)
+    }
+
+    @Test fun angleBracketLinkTargetMayContainSpaces() {
+        assertEquals(listOf("Plan" to "Projekte/Mein Plan.md"), links("[Plan](<Projekte/Mein Plan.md>)"))
+    }
+
+    @Test fun bareUrlIsTappableWithoutTrailingPunctuation() {
+        assertEquals(listOf("https://example.com/x?a=1" to "https://example.com/x?a=1"), links("Link: https://example.com/x?a=1."))
+        assertEquals(listOf("www.example.de" to "www.example.de"), links("(www.example.de)"))
+    }
+
+    @Test fun urlWithFragmentIsNoTag() {
+        assertEquals(listOf("https://x.de/p#abschnitt" to "https://x.de/p#abschnitt"), links("https://x.de/p#abschnitt"))
+    }
+
+    @Test fun wikiLinkPointsToNote() {
+        assertEquals(listOf("Alias" to "wiki:Andere Notiz"), links("[[Andere Notiz|Alias]]"))
+    }
+
+    @Test fun previewHasNoTappableLinks() {
+        val r = Markdown.render("[a](https://x.de) https://y.de", colors, links = false)
+        assertEquals(0, r.getStringAnnotations(Markdown.LINK_TAG, 0, r.length).size)
+    }
+
+    @Test fun linkTargets() {
+        assertEquals(Markdown.Target.Web("https://www.x.de"), Markdown.linkTarget("www.x.de"))
+        assertEquals(Markdown.Target.Web("mailto:a@b.de"), Markdown.linkTarget("mailto:a@b.de"))
+        assertEquals(Markdown.Target.Note("Andere Notiz"), Markdown.linkTarget("wiki:Andere Notiz#Kapitel"))
+        assertEquals(Markdown.Target.Note("Ordner/Mein Plan"), Markdown.linkTarget("Ordner/Mein%20Plan.md"))
     }
 }

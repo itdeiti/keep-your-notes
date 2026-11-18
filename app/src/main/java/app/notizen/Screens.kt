@@ -28,6 +28,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -89,6 +93,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -103,12 +109,16 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -430,6 +440,7 @@ fun EditorScreen(vm: AppVM) {
                         vm.edBody.text, c,
                         onToggle = { vm.toggleTask(it) },
                         onEdit = { vm.editAt(it) },
+                        onLink = { openLink(ctx, vm, it) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)
                             .clickable { vm.editAt(null) }
                             .padding(16.dp),
@@ -863,7 +874,7 @@ private fun Tool(label: String, bold: Boolean = false, italic: Boolean = false, 
 
 /** Markdown table: header bold, equal columns, cells wrap; separator row is skipped. */
 @Composable
-private fun MdTable(rows: List<String>, c: MdColors, modifier: Modifier) {
+private fun MdTable(rows: List<String>, c: MdColors, onTap: () -> Unit, onLink: (String) -> Unit, modifier: Modifier) {
     val data = rows.filterIndexed { i, _ -> i != 1 }.map { Markdown.cells(it) }
     val cols = data.maxOf { it.size }
     val line = MaterialTheme.colorScheme.outlineVariant
@@ -872,11 +883,11 @@ private fun MdTable(rows: List<String>, c: MdColors, modifier: Modifier) {
             if (r > 0) HorizontalDivider(color = line)
             Row(Modifier.fillMaxWidth().then(if (r == 0) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier)) {
                 for (ci in 0 until cols) {
-                    Text(
+                    MdText(
                         Markdown.render(cells.getOrElse(ci) { "" }, c),
+                        MaterialTheme.typography.bodyMedium.copy(fontWeight = if (r == 0) FontWeight.Bold else FontWeight.Normal),
+                        onTap, onLink,
                         Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (r == 0) FontWeight.Bold else FontWeight.Normal,
                     )
                 }
             }
@@ -886,7 +897,9 @@ private fun MdTable(rows: List<String>, c: MdColors, modifier: Modifier) {
 
 /** Read view: rendered lines, tappable checkboxes. */
 @Composable
-private fun MarkdownView(body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, modifier: Modifier) {
+private fun MarkdownView(
+    body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, onLink: (String) -> Unit, modifier: Modifier,
+) {
     val base = MaterialTheme.typography.bodyLarge
     val lines = body.split("\n")
     // table blocks: header row followed by a |---| separator
@@ -906,10 +919,12 @@ private fun MarkdownView(body: String, c: MdColors, onToggle: (Int) -> Unit, onE
           val tableEnd = tableAt[i]
           if (tableEnd != null) {
               skipUntil = tableEnd
-              MdTable(lines.subList(i, tableEnd), c, Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { onEdit(tableEnd - 1) })
+              val edit = { onEdit(tableEnd - 1) }
+              MdTable(lines.subList(i, tableEnd), c, edit, onLink, Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = edit))
               return@forEachIndexed
           }
-          Box(Modifier.fillMaxWidth().clickable { onEdit(i) }) {
+          val edit = { onEdit(i) }
+          Box(Modifier.fillMaxWidth().clickable(onClick = edit)) {
             val task = Markdown.TASK.find(line)
             val head = Markdown.HEADING.find(line)
             val bullet = Markdown.BULLET.find(line)
@@ -919,37 +934,76 @@ private fun MarkdownView(body: String, c: MdColors, onToggle: (Int) -> Unit, onE
                 task != null -> Row(Modifier.padding(start = indent.dp), verticalAlignment = Alignment.CenterVertically) {
                     val done = task.groupValues[2] != " "
                     Checkbox(checked = done, onCheckedChange = { onToggle(i) })
-                    Text(
-                        Markdown.render(line.substring(task.value.length), c), style = base,
-                        textDecoration = if (done) TextDecoration.LineThrough else null,
-                        color = if (done) c.marker else MaterialTheme.colorScheme.onSurface,
+                    MdText(
+                        Markdown.render(line.substring(task.value.length), c),
+                        base.copy(
+                            textDecoration = if (done) TextDecoration.LineThrough else null,
+                            color = if (done) c.marker else MaterialTheme.colorScheme.onSurface,
+                        ),
+                        edit, onLink,
                     )
                 }
-                head != null -> Text(
+                head != null -> MdText(
                     Markdown.render(line.substring(head.value.length), c),
-                    style = when (head.groupValues[1].length) {
+                    when (head.groupValues[1].length) {
                         1 -> MaterialTheme.typography.headlineSmall
                         2 -> MaterialTheme.typography.titleLarge
                         else -> MaterialTheme.typography.titleMedium
-                    },
-                    fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+                    }.copy(fontWeight = FontWeight.Bold),
+                    edit, onLink, Modifier.padding(top = 8.dp, bottom = 2.dp),
                 )
                 bullet != null -> Row(Modifier.padding(start = indent.dp, top = 2.dp)) {
                     val mark = bullet.groupValues[1]
                     Text(if (mark[0].isDigit()) "$mark " else "•  ", style = base, color = c.marker)
-                    Text(Markdown.render(line.substring(bullet.value.length), c), style = base)
+                    MdText(Markdown.render(line.substring(bullet.value.length), c), base, edit, onLink)
                 }
-                line.startsWith(">") -> Text(
-                    Markdown.render(line.removePrefix(">").trimStart(), c), style = base,
-                    fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(start = 12.dp, top = 2.dp),
+                line.startsWith(">") -> MdText(
+                    Markdown.render(line.removePrefix(">").trimStart(), c),
+                    base.copy(fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.secondary),
+                    edit, onLink, Modifier.padding(start = 12.dp, top = 2.dp),
                 )
                 line.trim() == "---" -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 line.isBlank() -> Spacer(Modifier.height(10.dp))
-                else -> Text(Markdown.render(line, c), style = base)
+                else -> MdText(Markdown.render(line, c), base, edit, onLink)
             }
           }
         }
+    }
+}
+
+/**
+ * Rendered text whose links react to taps; a tap anywhere else calls [onTap].
+ * Own gesture handling instead of LinkAnnotation, because the surrounding line/table/view
+ * is itself clickable (tap = edit) and must not swallow or race with link taps.
+ */
+@Composable
+private fun MdText(text: AnnotatedString, style: TextStyle, onTap: () -> Unit, onLink: (String) -> Unit, modifier: Modifier = Modifier) {
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val tapNow by rememberUpdatedState(onTap)
+    val linkNow by rememberUpdatedState(onLink)
+    val hasLinks = remember(text) { text.getStringAnnotations(Markdown.LINK_TAG, 0, text.length).isNotEmpty() }
+    val tap = if (!hasLinks) modifier else modifier.pointerInput(text) {
+        detectTapGestures { pos ->
+            val l = layout
+            val line = l?.getLineForVerticalPosition(pos.y)
+            val inside = l != null && line != null && pos.x >= l.getLineLeft(line) && pos.x <= l.getLineRight(line)
+            val off = if (inside) l!!.getOffsetForPosition(pos) else -1
+            val hit = if (off < 0) null else text.getStringAnnotations(Markdown.LINK_TAG, off, off + 1).firstOrNull()
+            if (hit != null) linkNow(hit.item) else tapNow()
+        }
+    }
+    Text(text, tap, style = style, onTextLayout = { layout = it })
+}
+
+/** Web links open in the browser, everything else is looked up as a note in the vault. */
+private fun openLink(ctx: android.content.Context, vm: AppVM, raw: String) {
+    when (val t = Markdown.linkTarget(raw)) {
+        is Markdown.Target.Web -> try {
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(t.uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {
+            Toast.makeText(ctx, "Keine App für diesen Link", Toast.LENGTH_SHORT).show()
+        }
+        is Markdown.Target.Note -> if (!vm.openNote(t.name)) Toast.makeText(ctx, "Notiz „${t.name}“ nicht gefunden", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -1024,6 +1078,7 @@ fun SettingsScreen(vm: AppVM) {
             ) { Text(if (ready) "Speichern & synchronisieren" else "Speichern & klonen") }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (vm.status.isNotBlank()) Text(vm.status, style = MaterialTheme.typography.bodySmall)
+            LockSettings()
             Text(
                 "Vault-Ordner: " + Vault.dir(ctx).path,
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
@@ -1037,6 +1092,100 @@ fun SettingsScreen(vm: AppVM) {
             )
         }
     }
+}
+
+/** "4. App-Sperre": set, change or remove the PIN and choose when the app locks. */
+@Composable
+private fun LockSettings() {
+    val ctx = LocalContext.current
+    var on by remember { mutableStateOf(AppLock.enabled(ctx)) }
+    var delay by remember { mutableStateOf(AppLock.delay(ctx)) }
+    var mode by remember { mutableStateOf<PinMode?>(null) }
+
+    Text("4. App-Sperre", style = MaterialTheme.typography.titleMedium)
+    Text(
+        if (on) "PIN aktiv. Die App sperrt sich, wenn sie im Hintergrund war."
+        else "Schützt die App mit einer PIN. Die Dateien im Vault-Ordner bleiben unverschlüsselt.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+    )
+    if (!on) OutlinedButton(onClick = { mode = PinMode.Set }, modifier = Modifier.fillMaxWidth()) { Text("PIN festlegen") }
+    else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { mode = PinMode.Change }, modifier = Modifier.weight(1f)) { Text("PIN ändern") }
+            OutlinedButton(onClick = { mode = PinMode.Remove }, modifier = Modifier.weight(1f)) { Text("PIN entfernen") }
+        }
+        Text("Sperren nach", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (d in AppLock.DELAYS) FilterChip(
+                selected = delay == d,
+                onClick = { delay = d; AppLock.setDelay(ctx, d) },
+                label = { Text(when (d) { 0 -> "Sofort"; else -> "${d / 60} Min." }) },
+            )
+        }
+    }
+    mode?.let { m -> PinDialog(m, onDone = { mode = null; on = AppLock.enabled(ctx) }) }
+}
+
+private enum class PinMode { Set, Change, Remove }
+
+@Composable
+private fun PinDialog(mode: PinMode, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var old by remember { mutableStateOf("") }
+    var new1 by remember { mutableStateOf("") }
+    var new2 by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    val needOld = mode != PinMode.Set
+    val needNew = mode != PinMode.Remove
+    val digits = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+    fun field(v: String, set: (String) -> Unit, label: String) = @Composable {
+        OutlinedTextField(
+            v, { t -> set(t.filter { it.isDigit() }.take(AppLock.MAX_LEN)); error = "" }, Modifier.fillMaxWidth(),
+            label = { Text(label) }, singleLine = true, keyboardOptions = digits,
+            visualTransformation = PasswordVisualTransformation(),
+        )
+    }
+
+    fun confirm() {
+        if (needNew && !AppLock.validPin(new1)) { error = "PIN: ${AppLock.MIN_LEN}–${AppLock.MAX_LEN} Ziffern"; return }
+        if (needNew && new1 != new2) { error = "PINs stimmen nicht überein"; return }
+        working = true
+        scope.launch {
+            val ok = withContext(Dispatchers.Default) {
+                if (needOld && !AppLock.check(ctx, old)) return@withContext false
+                if (needNew) AppLock.setPin(ctx, new1) else AppLock.clear(ctx)
+                true
+            }
+            working = false
+            if (ok) {
+                Toast.makeText(ctx, if (needNew) "PIN gespeichert" else "PIN entfernt", Toast.LENGTH_SHORT).show()
+                onDone()
+            } else {
+                val wait = AppLock.waitMs(ctx)
+                error = if (wait > 0) "Falsche PIN – warten ${(wait + 999) / 1000} s" else "Aktuelle PIN falsch"
+                old = ""
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text(when (mode) { PinMode.Set -> "PIN festlegen"; PinMode.Change -> "PIN ändern"; PinMode.Remove -> "PIN entfernen" }) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (needOld) field(old, { old = it }, "Aktuelle PIN")()
+                if (needNew) {
+                    field(new1, { new1 = it }, "Neue PIN (${AppLock.MIN_LEN}–${AppLock.MAX_LEN} Ziffern)")()
+                    field(new2, { new2 = it }, "Neue PIN wiederholen")()
+                }
+                if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(onClick = ::confirm, enabled = !working) { Text("OK") } },
+        dismissButton = { TextButton(onClick = onDone) { Text("Abbrechen") } },
+    )
 }
 
 @Composable

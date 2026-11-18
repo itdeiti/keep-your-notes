@@ -15,6 +15,7 @@ import android.widget.RemoteViews
 import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -29,6 +30,11 @@ import androidx.work.WorkerParameters
 import java.util.concurrent.TimeUnit
 
 class App : Application() {
+    companion object {
+        /** Work that must outlive the screen that started it (e.g. the widget dialog closing right away). */
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    }
+
     override fun onCreate() {
         super.onCreate()
         // JGit looks for ~/.gitconfig; Android has no home directory.

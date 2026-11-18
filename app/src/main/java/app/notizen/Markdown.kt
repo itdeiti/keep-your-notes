@@ -2,9 +2,7 @@ package app.notizen
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -15,7 +13,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.em
 import java.time.LocalDate
@@ -33,7 +30,10 @@ object Markdown {
     private val META_STRIP = Regex("""\s*(📅|⏰|✅|⏳|🛫|➕) ?\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?""")
     private val DUE = Regex("""📅 ?(\d{4}-\d{2}-\d{2})""")
 
-    private enum class K { BOLD, STRIKE, ITALIC, CODE, IMAGE, LINK, WIKI, TAG, META }
+    private enum class K { BOLD, STRIKE, ITALIC, CODE, IMAGE, LINK, WIKI, URL, TAG, META }
+
+    /** Annotation tag on tappable spans in [render]; the item is a URL or "wiki:" + note name. */
+    const val LINK_TAG = "link"
 
     private val RULES = listOf(
         K.BOLD to Regex("""\*\*(.+?)\*\*"""),
@@ -41,8 +41,9 @@ object Markdown {
         K.ITALIC to Regex("""(?<![*\w])\*(?![\s*])(.+?)(?<![\s*])\*(?![*\w])"""),
         K.CODE to Regex("""`([^`]+)`"""),
         K.IMAGE to Regex("""!\[([^\]]*)\]\(([^)\s]+)\)"""),
-        K.LINK to Regex("""\[([^\]]+)\]\(([^)\s]+)\)"""),
+        K.LINK to Regex("""\[([^\]]+)\]\((?:<([^>]+)>|([^)\s]+))\)"""),
         K.WIKI to Regex("""\[\[([^\]|]+)(?:\|([^\]]+))?\]\]"""),
+        K.URL to Regex("""(?<![\w/@])(?:https?://|www\.)[^\s<>()\[\]]*[^\s<>()\[\].,;:!?'"*_~]"""),
         K.TAG to Regex("""(?<![\w#&/])#([\p{L}_][\p{L}\d_/-]*)"""),
         K.META to Regex("""(📅|⏰|✅) ?(\d{4}-\d{2}-\d{2}(?: \d{1,2}:\d{2})?)|🔁 ?[A-Za-z0-9][A-Za-z0-9, ]*[A-Za-z0-9]"""),
     )
@@ -53,7 +54,7 @@ object Markdown {
         K.STRIKE -> SpanStyle(textDecoration = TextDecoration.LineThrough)
         K.ITALIC -> SpanStyle(fontStyle = FontStyle.Italic)
         K.CODE -> SpanStyle(fontFamily = FontFamily.Monospace, background = c.code)
-        K.LINK, K.WIKI, K.IMAGE -> SpanStyle(color = c.link)
+        K.LINK, K.WIKI, K.IMAGE, K.URL -> SpanStyle(color = c.link)
         K.TAG -> SpanStyle(color = c.tag)
         K.META -> SpanStyle(color = c.meta, fontSize = 0.85.em)
     }
@@ -92,7 +93,7 @@ object Markdown {
             for ((k, re) in RULES) for (m in re.findAll(line)) {
                 val s = off + m.range.first
                 val e = off + m.range.last + 1
-                if (k == K.TAG || k == K.META) { addStyle(style(k, c), s, e); continue }
+                if (k == K.TAG || k == K.META || k == K.URL) { addStyle(style(k, c), s, e); continue }
                 val g = m.groups[1]!!.range
                 addStyle(style(k, c), off + g.first, off + g.last + 1)
                 addStyle(dim, s, off + g.first)
@@ -102,32 +103,50 @@ object Markdown {
         }
     }
 
-    /** View mode: syntax removed, links clickable. */
+    /**
+     * View mode: syntax removed. With [links], tappable spans carry a [LINK_TAG] string annotation
+     * (resolved by the read view's own tap handler, see [linkTarget]).
+     */
     fun render(line: String, c: MdColors, links: Boolean = true): AnnotatedString = buildAnnotatedString {
         val ms = RULES.flatMap { (k, re) -> re.findAll(line).map { k to it } }
             .sortedWith(compareBy({ it.second.range.first }, { -it.second.range.last }))
+        val linkStyle = SpanStyle(color = c.link, textDecoration = TextDecoration.Underline)
+        fun link(target: String, label: String, st: SpanStyle = linkStyle) {
+            if (links) { pushStringAnnotation(LINK_TAG, target); withStyle(st) { append(label) }; pop() }
+            else withStyle(SpanStyle(color = c.link)) { append(label) }
+        }
         var pos = 0
         for ((k, m) in ms) {
             if (m.range.first < pos) continue
             append(line.substring(pos, m.range.first))
             when (k) {
-                K.LINK -> if (links) {
-                    withLink(LinkAnnotation.Url(m.groupValues[2], TextLinkStyles(SpanStyle(color = c.link, textDecoration = TextDecoration.Underline)))) {
-                        append(m.groupValues[1])
-                    }
-                } else withStyle(style(k, c)) { append(m.groupValues[1]) }
-                K.IMAGE -> if (links) {
-                    withLink(LinkAnnotation.Url(m.groupValues[2], TextLinkStyles(SpanStyle(color = c.link)))) {
-                        append("🖼 " + m.groupValues[1].ifBlank { "Bild" })
-                    }
-                } else append("🖼")
-                K.WIKI -> withStyle(style(k, c)) { append(m.groupValues[2].ifEmpty { m.groupValues[1] }) }
+                K.LINK -> link(m.groupValues[2].ifEmpty { m.groupValues[3] }, m.groupValues[1])
+                K.URL -> link(m.value, m.value)
+                K.IMAGE -> if (links) link(m.groupValues[2], "🖼 " + m.groupValues[1].ifBlank { "Bild" }, SpanStyle(color = c.link))
+                    else append("🖼")
+                K.WIKI -> link("wiki:" + m.groupValues[1].trim(), m.groupValues[2].ifEmpty { m.groupValues[1] }, SpanStyle(color = c.link))
                 K.TAG, K.META -> withStyle(style(k, c)) { append(m.value) }
                 else -> withStyle(style(k, c)) { append(m.groupValues[1]) }
             }
             pos = m.range.last + 1
         }
         append(line.substring(pos))
+    }
+
+    sealed interface Target {
+        data class Web(val uri: String) : Target
+        /** Note by name or relative path, without ".md" and "#heading". */
+        data class Note(val name: String) : Target
+    }
+
+    /** What a tapped link points to: web/mail/tel URIs open outside, everything else is a note in the vault. */
+    fun linkTarget(raw: String): Target {
+        val t = raw.trim()
+        if (t.startsWith("wiki:")) return Target.Note(t.removePrefix("wiki:").substringBefore('#').trim())
+        if (t.startsWith("www.", ignoreCase = true)) return Target.Web("https://$t")
+        if (Regex("""^[a-zA-Z][a-zA-Z0-9+.-]*:""").containsMatchIn(t)) return Target.Web(t)
+        val path = runCatching { java.net.URLDecoder.decode(t.replace("+", "%2B"), "UTF-8") }.getOrDefault(t)
+        return Target.Note(path.substringBefore('#').removeSuffix(".md").removePrefix("./"))
     }
 
     /** Card preview in the list. */

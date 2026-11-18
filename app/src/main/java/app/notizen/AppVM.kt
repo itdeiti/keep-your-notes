@@ -203,6 +203,18 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         screen = Screen.Edit
     }
 
+    /** Follow a [[wiki link]] or relative Markdown link: path first, then title (case-insensitive). */
+    fun openNote(name: String): Boolean {
+        val key = name.trim().trimStart('/').lowercase()
+        if (key.isEmpty()) return false
+        val n = notes.firstOrNull { it.path.removeSuffix(".md").lowercase() == key }
+            ?: notes.firstOrNull { it.path.removeSuffix(".md").lowercase().endsWith("/$key") }
+            ?: notes.firstOrNull { it.title.lowercase() == key.substringAfterLast('/') }
+            ?: return false
+        open(n)
+        return true
+    }
+
     private fun openPath(path: String, edit: Boolean = false) {
         val root = Vault.dir(ctx)
         val f = File(root, path)
