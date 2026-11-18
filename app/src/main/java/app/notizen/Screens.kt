@@ -909,6 +909,27 @@ fun SettingsScreen(vm: AppVM) {
                     "der Abgleich mit dem Mac über GitHub läuft weiter.",
                 enabled = !vm.busy,
             ) { askStorage = it }
+            val leftover = remember(tick, vm.busy) { Vault.leftoverShared(ctx) }
+            var askLeftover by remember { mutableStateOf(false) }
+            if (leftover != null) {
+                Text(
+                    "⚠ Der alte öffentliche Ordner ${leftover.path} existiert noch. Andere Apps können die Dateien darin lesen.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                )
+                OutlinedButton(onClick = { askLeftover = true }, enabled = !vm.busy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Öffentlichen Ordner löschen")
+                }
+                if (askLeftover) {
+                    val files = remember(leftover) { leftover.walkTopDown().count { it.isFile } }
+                    AlertDialog(
+                        onDismissRequest = { askLeftover = false },
+                        title = { Text("Ordner löschen?") },
+                        text = { Text("${leftover.path} mit $files Dateien wird endgültig gelöscht. Der Vault in der App und auf GitHub bleibt erhalten.") },
+                        confirmButton = { TextButton({ askLeftover = false; vm.deleteLeftover() }) { Text("Löschen") } },
+                        dismissButton = { TextButton({ askLeftover = false }) { Text("Abbrechen") } },
+                    )
+                }
+            }
             if (storage == Storage.Shared) Permission("Zugriff auf alle Dateien (für den gemeinsamen Ordner mit Obsidian)", files) {
                 ctx.startActivity(
                     Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}"))
@@ -946,6 +967,15 @@ fun SettingsScreen(vm: AppVM) {
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (vm.status.isNotBlank()) Text(vm.status, style = MaterialTheme.typography.bodySmall)
             LockSettings()
+            Text("5. Darstellung", style = MaterialTheme.typography.titleMedium)
+            var theme by remember { mutableStateOf(ThemeMode.load(ctx)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (m in ThemeMode.entries) FilterChip(
+                    selected = theme == m,
+                    onClick = { theme = m; ThemeMode.save(ctx, m) },
+                    label = { Text(m.label) },
+                )
+            }
             askStorage?.let { to ->
                 val cloned = remember { GitSync.isCloned(ctx) }
                 AlertDialog(

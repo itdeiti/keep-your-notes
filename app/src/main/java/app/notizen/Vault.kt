@@ -137,10 +137,11 @@ object Vault {
     /**
      * Move the whole vault (with .git) to [to] and switch the setting. Copy first, switch, then delete
      * the old copy, so an interrupted move never leaves the app without its notes. Caller holds the git lock.
+     * Returns the number of files that could not be deleted from the old place (0 = clean).
      */
-    fun relocate(ctx: Context, to: Storage) {
+    fun relocate(ctx: Context, to: Storage): Int {
         val p = Prefs.load(ctx)
-        if (p.storage == to) return
+        if (p.storage == to) return 0
         val from = dirFor(ctx, p.storage, p.folder)
         val target = dirFor(ctx, to, p.folder)
         if (from.isDirectory) {
@@ -158,7 +159,23 @@ object Vault {
             }
         }
         Prefs.save(ctx, p.copy(storage = to))
-        from.deleteRecursively()
+        return removeAll(from)
+    }
+
+    /** Delete [dir] with everything in it; returns how many files are still there afterwards. */
+    fun removeAll(dir: File): Int {
+        dir.deleteRecursively()
+        return if (dir.exists()) dir.walkTopDown().count { it.isFile } else 0
+    }
+
+    /**
+     * After switching to private storage: the old Documents folder if it still exists
+     * (delete failed, or the app was killed right after the switch). Its files stay readable by other apps.
+     */
+    fun leftoverShared(ctx: Context): File? {
+        val p = Prefs.load(ctx)
+        if (p.storage != Storage.Private || !Environment.isExternalStorageManager()) return null
+        return dirFor(ctx, Storage.Shared, p.folder).takeIf { it.exists() }
     }
 
     fun all(ctx: Context): List<Note> {

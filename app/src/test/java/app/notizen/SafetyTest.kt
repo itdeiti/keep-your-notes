@@ -34,4 +34,13 @@ class SafetyTest {
         assertEquals("inbox/Einkauf (Konflikt Handy 2026-11-18 0905).md", copy)
         assertEquals("inbox/Einkauf.md", Conflicts.original(copy))
     }
+
+    @Test fun removeAllReportsWhatIsLeft() {
+        val d = Files.createTempDirectory("old").toFile()
+        File(d, "a/b").mkdirs()
+        File(d, "a/b/n.md").writeText("x")
+        File(d, "top.md").writeText("y")
+        assertEquals(0, Vault.removeAll(d))
+        assertEquals(false, d.exists())
+    }
 }

@@ -161,7 +161,10 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         if (ready() && screen != Screen.Edit) sync()
     }
 
-    /** Move the vault between Documents (Obsidian) and app-private storage. */
+    /**
+     * Move the vault between Documents (Obsidian) and app-private storage. Messages go through [Status],
+     * so the [reload] at the end does not overwrite them.
+     */
     fun changeStorage(to: Storage) {
         if (busy) return
         saveEditor()
@@ -169,16 +172,31 @@ class AppVM(app: Application) : AndroidViewModel(app) {
             busy = true
             status = "Verschiebe Vault …"
             try {
-                GitSync.exclusive { Vault.relocate(ctx, to) }
+                val left = GitSync.exclusive { Vault.relocate(ctx, to) }
                 withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
-                status = if (to == Storage.Private) "Vault liegt jetzt privat in der App" else "Vault liegt jetzt in Documents/"
+                Status.set(ctx, when {
+                    left > 0 -> "⚠ Vault verschoben, aber $left Dateien am alten Ort konnten nicht gelöscht werden"
+                    to == Storage.Private -> "Vault liegt jetzt privat in der App"
+                    else -> "Vault liegt jetzt in Documents/"
+                })
             } catch (e: Exception) {
-                status = "⚠ Verschieben fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}"
+                Status.set(ctx, "⚠ Verschieben fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}")
             } finally {
                 busy = false
                 tick++
                 reload()
             }
+        }
+    }
+
+    /** Remove the old public vault folder that a move to private storage left behind. */
+    fun deleteLeftover() {
+        val dir = Vault.leftoverShared(ctx) ?: return
+        viewModelScope.launch {
+            val left = withContext(Dispatchers.IO) { Vault.removeAll(dir) }
+            Status.set(ctx, if (left == 0) "Alter öffentlicher Ordner gelöscht" else "⚠ $left Dateien in ${dir.path} ließen sich nicht löschen")
+            tick++
+            reload()
         }
     }
 
