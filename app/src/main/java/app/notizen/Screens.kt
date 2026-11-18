@@ -354,7 +354,12 @@ fun EditorScreen(vm: AppVM) {
         }, today.year, today.monthValue - 1, today.dayOfMonth).show()
     }
 
-    LaunchedEffect(vm.edKey) {
+    // Keyboard or microphone only once the PIN is entered: opening a note from a widget while
+    // locked must not raise the keyboard over the PIN screen or start dictation behind it.
+    var openPending by remember(vm.edKey) { mutableStateOf(true) }
+    LaunchedEffect(vm.edKey, AppLock.locked) {
+        if (AppLock.locked || !openPending) return@LaunchedEffect
+        openPending = false
         if (vm.dictateOnOpen) { vm.dictateOnOpen = false; dictate() }
         else if (!vm.edPreview) runCatching { focus.requestFocus() }
     }

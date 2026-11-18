@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -69,7 +70,11 @@ private fun PinScreen(onBack: () -> Unit, hint: String?) {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     BackHandler(onBack = onBack)
     val focus = LocalFocusManager.current
-    LaunchedEffect(Unit) { focus.clearFocus(force = true) } // no keyboard typing into the hidden editor
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) { // no keyboard over the keypad, no typing into the hidden editor
+        focus.clearFocus(force = true)
+        keyboard?.hide()
+    }
     LaunchedEffect(waitUntil) {
         while (System.currentTimeMillis() < waitUntil) { now = System.currentTimeMillis(); delay(250) }
         now = System.currentTimeMillis()
