@@ -19,6 +19,8 @@ class MainActivity : LockedActivity() {
         setContent {
             KynTheme {
                 LockGate(onBack = { moveTaskToBack(true) }, hint = vm.pendingShareHint) { App(vm) }
+                // no screenshots or recents preview as soon as encrypted content is unlocked
+                LaunchedEffect(SecretSession.version) { SecretSession.secureWindow(this@MainActivity) }
                 // shared text waits for the PIN before anything is written to the vault
                 LaunchedEffect(AppLock.locked) { if (!AppLock.locked) vm.runPendingShare() }
             }
@@ -49,6 +51,7 @@ private fun App(vm: AppVM) {
         Screen.List -> ListScreen(vm)
         Screen.Tasks -> TasksScreen(vm)
         Screen.Edit -> EditorScreen(vm)
+        Screen.Secret -> SecretScreen(vm)
         Screen.Settings -> SettingsScreen(vm)
     }
 }
