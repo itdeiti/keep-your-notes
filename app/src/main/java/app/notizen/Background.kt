@@ -103,6 +103,8 @@ class NotesWidget : AppWidgetProvider() {
         }
     }
 
+    override fun onDeleted(ctx: Context, ids: IntArray) = WidgetFilter.delete(ctx, ids)
+
     companion object {
         private const val MAX_ROWS = 8
         private val plain = MdColors(Color.Unspecified, Color.Unspecified, Color.Unspecified, Color.Unspecified, Color.Unspecified)
@@ -121,8 +123,11 @@ class NotesWidget : AppWidgetProvider() {
         }
 
         /** A note as widget rows: title, text blocks and tasks in file order, capped. */
-        private fun rows(n: Note): List<Row> {
+        private fun rows(n: Note, content: WidgetFilter.Content): List<Row> {
             val out = mutableListOf<Row>(Row.Title((if (n.pinned) "📌 " else "") + n.title))
+            if (content == WidgetFilter.Content.Titles) return out
+            val tasksOnly = content != WidgetFilter.Content.All
+            val openOnly = content == WidgetFilter.Content.OpenTasks
             val block = mutableListOf<String>()
             var shown = 0
             var hidden = 0
@@ -133,9 +138,15 @@ class NotesWidget : AppWidgetProvider() {
                 block.clear()
             }
             for (line in n.body.split("\n")) {
-                if (shown >= MAX_ROWS) { if (line.isNotBlank()) hidden++; continue }
+                if (shown >= MAX_ROWS) {
+                    val t = Markdown.TASK.find(line)
+                    val counts = if (t == null) line.isNotBlank() && !tasksOnly else !openOnly || t.groupValues[2] == " "
+                    if (counts) hidden++
+                    continue
+                }
                 val m = Markdown.TASK.find(line)
-                if (m == null) { if (line.isNotBlank()) block += line; continue }
+                if (m == null) { if (line.isNotBlank() && !tasksOnly) block += line; continue }
+                if (openOnly && m.groupValues[2] != " ") continue
                 flush()
                 val text = Markdown.render(Markdown.stripTaskMeta(line.substring(m.value.length)), plain, false).text
                 val due = Regex("""📅 ?\d{4}-(\d{2})-(\d{2})""").find(line)
@@ -156,13 +167,19 @@ class NotesWidget : AppWidgetProvider() {
         }
 
         private fun update(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-            val notes = if (Environment.isExternalStorageManager()) Vault.all(ctx)
-                .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified })
-                .take(30) else emptyList()
+            val all = if (Environment.isExternalStorageManager()) Vault.all(ctx)
+                .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified }) else emptyList()
+            for (id in ids) {
+                val f = WidgetFilter.load(ctx, id)
+                runCatching { mgr.updateAppWidget(id, views(ctx, id, f, f.apply(all).take(30))) }
+            }
+        }
+
+        private fun views(ctx: Context, id: Int, f: WidgetFilter, notes: List<Note>): RemoteViews {
             val px = ctx.resources.displayMetrics.density
             val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(3)
             for (n in notes) {
-                val rs = rows(n)
+                val rs = rows(n, f.content)
                 val edit = Intent().putExtra("edit", n.path)
                 rs.forEachIndexed { i, r ->
                     val v = when (r) {
@@ -201,6 +218,8 @@ class NotesWidget : AppWidgetProvider() {
             val v = RemoteViews(ctx.packageName, R.layout.widget_list)
             v.setRemoteAdapter(R.id.wl_items, items.build())
             v.setEmptyView(R.id.wl_items, R.id.wl_empty)
+            v.setTextViewText(R.id.wl_title, f.title.ifBlank { "Notizen" })
+            v.setTextViewText(R.id.wl_empty, if (f.restricted || f.content != WidgetFilter.Content.All) "Nichts in dieser Auswahl" else "Noch keine Notizen")
             v.setPendingIntentTemplate(
                 R.id.wl_items,
                 PendingIntent.getActivity(
@@ -215,7 +234,7 @@ class NotesWidget : AppWidgetProvider() {
                 R.id.wl_title,
                 PendingIntent.getActivity(ctx, 13, Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE),
             )
-            ids.forEach { mgr.updateAppWidget(it, v) }
+            return v
         }
     }
 }
