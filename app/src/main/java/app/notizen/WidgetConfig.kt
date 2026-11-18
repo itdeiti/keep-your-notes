@@ -1,15 +1,13 @@
 package app.notizen
 
 import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.os.Environment
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,17 +37,14 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
@@ -130,32 +125,36 @@ data class WidgetFilter(
  * Opens when a "Notizliste" widget is placed, and again via long-press → widget settings.
  * Started by the launcher; the result tells it whether to keep the new widget.
  */
-class WidgetConfigActivity : ComponentActivity() {
+class WidgetConfigActivity : LockedActivity() {
     private var id = AppWidgetManager.INVALID_APPWIDGET_ID
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         setResult(RESULT_CANCELED, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id))
-        if (id == AppWidgetManager.INVALID_APPWIDGET_ID) { finish(); return }
+        // exported for the launcher: only accept ids of our own list widget
+        val provider = AppWidgetManager.getInstance(this).getAppWidgetInfo(id)?.provider
+        if (provider != ComponentName(this, NotesWidget::class.java)) { finish(); return }
         enableEdgeToEdge()
+        if (!AppLock.enabled(this)) AppLock.locked = false
         val start = WidgetFilter.load(this, id)
         val app = applicationContext
         setContent {
-            val ctx = LocalContext.current
-            val scheme = if (isSystemInDarkTheme()) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
             // reading the whole vault can take a moment: off the main thread
             val vault by produceState<Pair<List<Note>, List<String>>?>(null) {
                 value = withContext(Dispatchers.IO) {
-                    val ok = Environment.isExternalStorageManager() && GitSync.isCloned(app)
-                    if (ok) Vault.all(app) to Vault.folders(Vault.dir(app)) else emptyList<Note>() to emptyList()
+                    if (Vault.accessible(app) && GitSync.isCloned(app)) Vault.all(app) to Vault.folders(Vault.dir(app))
+                    else emptyList<Note>() to emptyList()
                 }
             }
-            MaterialTheme(colorScheme = scheme) {
-                Surface {
-                    val v = vault
-                    if (v == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    else WidgetConfigScreen(start, v.first, v.second, onSave = ::save, onCancel = ::finish)
+            NotizenTheme {
+                // note titles are shown here, so the PIN applies like in the app
+                LockGate(onBack = ::finish) {
+                    Surface {
+                        val v = vault
+                        if (v == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        else WidgetConfigScreen(start, v.first, v.second, onSave = ::save, onCancel = ::finish)
+                    }
                 }
             }
         }

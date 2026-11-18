@@ -2,7 +2,6 @@ package app.notizen
 
 import android.app.Application
 import android.content.Intent
-import android.os.Environment
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +45,8 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     val clipping get() = clipKey == edKey
     private var edFolder by mutableStateOf("inbox")
     private var edSaved = ""
+    /** File time when the note was loaded or last saved: detects writes from the widget, sync or notifications. */
+    private var edMtime = 0L
 
     val edPinned get() = isPinned(edFront)
 
@@ -62,7 +63,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     }
 
     fun ready() = Prefs.load(ctx).repoUrl.isNotBlank() &&
-        Environment.isExternalStorageManager() && GitSync.isCloned(ctx)
+        Vault.accessible(ctx) && GitSync.isCloned(ctx)
 
     /** "#ko" in the search field filters by tags containing "ko"; anything else searches title and text. */
     val tagQuery: String? get() = query.trim().takeIf { it.startsWith("#") }?.let { cleanTag(it) }
@@ -98,7 +99,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     fun reload() {
         viewModelScope.launch {
             notes = withContext(Dispatchers.IO) {
-                if (Environment.isExternalStorageManager()) Vault.all(ctx).also { NotesWidget.refresh(ctx) } else emptyList()
+                if (Vault.accessible(ctx)) Vault.all(ctx).also { NotesWidget.refresh(ctx) } else emptyList()
             }
             status = Status.get(ctx)
         }
@@ -140,9 +141,45 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     fun openTask(item: Tasks.Item) = openPath(item.path)
 
+    private fun changedOnDisk(path: String): Boolean {
+        val f = File(Vault.dir(ctx), path)
+        return edMtime != 0L && f.exists() && f.lastModified() != edMtime
+    }
+
+    /** Back in the app with an unchanged editor: show what the widget or sync wrote meanwhile. */
+    private fun reloadEditorIfChanged() {
+        val path = edPath ?: return
+        if (screen != Screen.Edit || snapshot() != edSaved || !changedOnDisk(path)) return
+        val root = Vault.dir(ctx)
+        val preview = edPreview
+        open(Vault.read(root, File(root, path)), edit = !preview)
+    }
+
     fun onResume() {
+        reloadEditorIfChanged()
         tick++
         if (ready() && screen != Screen.Edit) sync()
+    }
+
+    /** Move the vault between Documents (Obsidian) and app-private storage. */
+    fun changeStorage(to: Storage) {
+        if (busy) return
+        saveEditor()
+        viewModelScope.launch {
+            busy = true
+            status = "Verschiebe Vault …"
+            try {
+                GitSync.exclusive { Vault.relocate(ctx, to) }
+                withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
+                status = if (to == Storage.Private) "Vault liegt jetzt privat in der App" else "Vault liegt jetzt in Documents/"
+            } catch (e: Exception) {
+                status = "⚠ Verschieben fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}"
+            } finally {
+                busy = false
+                tick++
+                reload()
+            }
+        }
     }
 
     fun setup(p: Prefs, token: String) {
@@ -166,14 +203,31 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private data class Share(val text: String, val subject: String?, val selection: Boolean)
+
+    /** Shared text received while locked: nothing is written (or fetched) until the PIN is entered. */
+    private var pendingShare by mutableStateOf<Share?>(null)
+    val pendingShareHint: String? get() = pendingShare?.let { "Geteilter Inhalt wird nach dem Entsperren gespeichert" }
+
+    fun runPendingShare() {
+        val s = pendingShare ?: return
+        pendingShare = null
+        clip(s.text, s.subject, s.selection)
+    }
+
+    private fun share(s: Share) {
+        if (s.text.isBlank()) return
+        if (AppLock.locked) pendingShare = s else clip(s.text, s.subject, s.selection)
+    }
+
     fun handleIntent(i: Intent?) {
         if (i == null || !ready()) return
         when {
-            i.action == Intent.ACTION_SEND -> clip(
-                i.getStringExtra(Intent.EXTRA_TEXT).orEmpty(), i.getStringExtra(Intent.EXTRA_SUBJECT), false,
+            i.action == Intent.ACTION_SEND -> share(
+                Share(i.getStringExtra(Intent.EXTRA_TEXT).orEmpty(), i.getStringExtra(Intent.EXTRA_SUBJECT), false),
             )
-            i.action == Intent.ACTION_PROCESS_TEXT -> clip(
-                i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(), null, true,
+            i.action == Intent.ACTION_PROCESS_TEXT -> share(
+                Share(i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(), null, true),
             )
             i.hasExtra("conflicts") -> { saveEditor(); showConflicts = true; screen = Screen.List; reload() }
             i.hasExtra("new") -> newNote(i.getStringExtra("new") ?: "note")
@@ -198,6 +252,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         edBody = TextFieldValue(n.body, TextRange(n.body.trimEnd().length))
         edPreview = !edit && n.body.isNotBlank()
         edSaved = snapshot()
+        edMtime = n.modified
         dictateOnOpen = false
         edKey++
         screen = Screen.Edit
@@ -215,10 +270,11 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** Paths come from intents (widget, notifications, but MainActivity is exported): only notes inside the vault. */
     private fun openPath(path: String, edit: Boolean = false) {
         val root = Vault.dir(ctx)
-        val f = File(root, path)
-        if (f.exists()) open(Vault.read(root, f), edit)
+        val f = Vault.safeFile(root, path) ?: return
+        if (f.exists()) open(Vault.read(root.canonicalFile, f), edit)
     }
 
     fun newNote(kind: String, text: String = "", title: String = "", folder: String = "inbox", front: List<String> = emptyList()) {
@@ -232,6 +288,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         edBody = TextFieldValue(body, TextRange(body.length))
         edPreview = false
         edSaved = if (text.isNotBlank()) "" else snapshot()
+        edMtime = 0L
         dictateOnOpen = kind == "dictate"
         edKey++
         screen = Screen.Edit
@@ -245,7 +302,12 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         if (edPath == null && title.isBlank() && body.isBlank()) return
         val root = Vault.dir(ctx)
         var path = edPath
-        if (path == null) {
+        if (path != null && changedOnDisk(path)) {
+            // Someone else wrote the file meanwhile (widget task, tick, sync): keep theirs,
+            // save ours next to it as a conflict copy; the editor shows the conflict banner.
+            path = Conflicts.copyPath(path)
+            status = "⚠ Notiz wurde inzwischen geändert – deine Version ist eine Konfliktkopie"
+        } else if (path == null) {
             val first = body.lineSequence().map { Markdown.stripTaskMeta(it.replace(Markdown.LIST, "").trimStart('#', ' ')) }
                 .firstOrNull { it.isNotBlank() }.orEmpty().take(40)
             path = Vault.uniquePath(root, edFolder, title.ifBlank { first })
@@ -254,6 +316,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
             if (File(root, path).renameTo(File(root, np))) path = np
         }
         Vault.write(root, path, edFront, body)
+        edMtime = File(root, path).lastModified()
         edPath = path
         edTitle = titleOf(path)
         edSaved = snapshot()

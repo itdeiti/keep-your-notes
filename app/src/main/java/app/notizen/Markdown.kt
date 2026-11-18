@@ -133,18 +133,25 @@ object Markdown {
         append(line.substring(pos))
     }
 
+    /** URI schemes a tap may open; anything else (content:, intent:, file:, javascript: …) is refused. */
+    val OPEN_SCHEMES = setOf("http", "https", "mailto", "tel", "geo")
+
     sealed interface Target {
         data class Web(val uri: String) : Target
+        /** Has a scheme, but not one of [OPEN_SCHEMES]. */
+        data class Blocked(val uri: String) : Target
         /** Note by name or relative path, without ".md" and "#heading". */
         data class Note(val name: String) : Target
     }
 
-    /** What a tapped link points to: web/mail/tel URIs open outside, everything else is a note in the vault. */
+    /** What a tapped link points to: allowed URIs open outside, other schemes are blocked, the rest is a note. */
     fun linkTarget(raw: String): Target {
         val t = raw.trim()
         if (t.startsWith("wiki:")) return Target.Note(t.removePrefix("wiki:").substringBefore('#').trim())
         if (t.startsWith("www.", ignoreCase = true)) return Target.Web("https://$t")
-        if (Regex("""^[a-zA-Z][a-zA-Z0-9+.-]*:""").containsMatchIn(t)) return Target.Web(t)
+        Regex("""^([a-zA-Z][a-zA-Z0-9+.-]*):""").find(t)?.let {
+            return if (it.groupValues[1].lowercase() in OPEN_SCHEMES) Target.Web(t) else Target.Blocked(t)
+        }
         val path = runCatching { java.net.URLDecoder.decode(t.replace("+", "%2B"), "UTF-8") }.getOrDefault(t)
         return Target.Note(path.substringBefore('#').removeSuffix(".md").removePrefix("./"))
     }

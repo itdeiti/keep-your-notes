@@ -2,7 +2,7 @@
 
 Small Android app that replaces Google Keep and keeps every note as a Markdown file in an Obsidian vault, synced with Git.
 
-- Widgets: "Schnellnotiz" (quick note, checklist, dictation), "Aufgabe" (quick task with reminder, see below) and "Notizliste" (Keep-style list of notes, pinned first; tap a checkbox to tick it without opening the app, tap text to edit the note).
+- Widgets: "Schnellnotiz" (quick note, checklist, dictation), "Aufgabe" (quick task with reminder, see below) and "Notizliste" (Keep-style list of notes, pinned first; tap a checkbox to tick it without opening the app, tap text to edit the note). Each Notizliste widget has its own settings (on placing it, or long-press → widget settings): title, content (all / tasks / open tasks / titles) and any mix of folders, tags and single notes.
 - List of the whole vault, newest first, pinned on top, search and tag filter: tag chips, "Tags…" opens a searchable tag list with counts, `#ko` in the search field filters by tags containing "ko".
 - Editor with Markdown highlighting, toolbar, list continuation, read view with tappable checkboxes.
 - Tasks with due date and reminder in the Obsidian Tasks/Reminder format:
@@ -23,7 +23,8 @@ Small Android app that replaces Google Keep and keeps every note as a Markdown f
 - Tags: chips under the title; × removes, ＋ picks an existing tag or creates a new one (`tags: [a, b]` in the frontmatter).
 - Nightly inbox sorting on the Mac (see below).
 - Git: saving commits right away (works offline), pushing happens as soon as there is network, the app pulls when opened and every 3 hours. A conflict keeps the server version and saves the phone version next to it as `… (Konflikt Handy <time>).md`; a notification and a "⚠ Konflikte" chip in the list point to it, and the copy has buttons to open the original, keep the phone version (replaces the original) or discard it.
-- The repo lives in `Documents/<Ordner>` on shared storage, so Obsidian Android can open the same folder. Obsidian is optional.
+- Storage (Settings → 1): **Mit Obsidian teilen** keeps the repo in `Documents/<Ordner>` on shared storage, so Obsidian Android can open the same folder, but any app with "all files" access can read it. **Nur in dieser App** keeps it in app-private storage (other apps cannot read it, Obsidian on the phone cannot either; GitHub sync to the Mac is unchanged). Switching moves the vault.
+- App lock (Settings → 4): PIN for the app, the Notizliste widget settings and shared text (a share waits for the PIN before anything is written). It does not cover the Notizliste widget itself or reminder notifications on the lock screen. Debug builds are debuggable: with USB debugging on, `adb run-as` can read private app data.
 
 ## Setup
 

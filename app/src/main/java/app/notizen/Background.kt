@@ -10,9 +10,10 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Paint
 import android.os.Bundle
-import android.os.Environment
+import android.util.Log
 import android.widget.RemoteViews
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -32,7 +33,10 @@ import java.util.concurrent.TimeUnit
 class App : Application() {
     companion object {
         /** Work that must outlive the screen that started it (e.g. the widget dialog closing right away). */
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val scope = CoroutineScope(
+            SupervisorJob() + Dispatchers.IO +
+                CoroutineExceptionHandler { _, e -> Log.e("Notizen", "Hintergrundaufgabe fehlgeschlagen", e) },
+        )
     }
 
     override fun onCreate() {
@@ -167,7 +171,7 @@ class NotesWidget : AppWidgetProvider() {
         }
 
         private fun update(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-            val all = if (Environment.isExternalStorageManager()) Vault.all(ctx)
+            val all = if (Vault.accessible(ctx)) Vault.all(ctx)
                 .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified }) else emptyList()
             for (id in ids) {
                 val f = WidgetFilter.load(ctx, id)

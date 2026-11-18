@@ -153,4 +153,11 @@ class MarkdownTest {
         assertEquals(Markdown.Target.Note("Andere Notiz"), Markdown.linkTarget("wiki:Andere Notiz#Kapitel"))
         assertEquals(Markdown.Target.Note("Ordner/Mein Plan"), Markdown.linkTarget("Ordner/Mein%20Plan.md"))
     }
+
+    @Test fun dangerousSchemesAreBlocked() {
+        for (u in listOf("content://x/y", "intent://scan#Intent;end", "file:///sdcard/a", "javascript:alert(1)"))
+            assertEquals(Markdown.Target.Blocked(u), Markdown.linkTarget(u))
+        assertEquals(Markdown.Target.Web("HTTPS://x.de"), Markdown.linkTarget("HTTPS://x.de"))
+        assertEquals(Markdown.Target.Web("tel:+491234"), Markdown.linkTarget("tel:+491234"))
+    }
 }

@@ -20,7 +20,6 @@ import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.TreeWalk
 import java.io.File
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 /**
  * The phone's git engine. Every operation runs under one process-wide lock,
@@ -52,6 +51,9 @@ object GitSync {
         }
         return git
     }
+
+    /** Run [block] while no git operation touches the vault (e.g. moving it). */
+    suspend fun <T> exclusive(block: () -> T): T = locked(block)
 
     suspend fun cloneOrOpen(ctx: Context) = locked {
         val dir = Vault.dir(ctx)
@@ -135,16 +137,14 @@ object GitSync {
         val repo = git.repository
         val copies = mutableListOf<String>()
         val ours = repo.resolve(Constants.HEAD)
-        val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HHmm"))
+        val now = LocalDateTime.now()
         for (p in paths) {
             val o = blob(repo, ours, p)
             val t = blob(repo, theirs, p)
             val f = File(repo.workTree, p)
             if (t != null) f.writeBytes(t) else f.delete()
             if (o != null && !o.contentEquals(t)) {
-                val ext = p.substringAfterLast('.', "")
-                val base = if (ext.isEmpty()) p else p.removeSuffix(".$ext")
-                val copy = "$base (Konflikt Handy $stamp)" + if (ext.isEmpty()) "" else ".$ext"
+                val copy = Conflicts.copyPath(p, now)
                 File(repo.workTree, copy).apply { parentFile?.mkdirs() }.writeBytes(o)
                 copies += copy
             }

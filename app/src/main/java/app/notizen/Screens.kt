@@ -1,10 +1,10 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
-
 package app.notizen
 
 import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -15,31 +15,17 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextLayoutResult
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
@@ -52,6 +38,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -67,21 +55,21 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -93,8 +81,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -102,27 +88,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 @Composable
 fun mdColors(): MdColors {
@@ -872,141 +857,6 @@ private fun Tool(label: String, bold: Boolean = false, italic: Boolean = false, 
     }
 }
 
-/** Markdown table: header bold, equal columns, cells wrap; separator row is skipped. */
-@Composable
-private fun MdTable(rows: List<String>, c: MdColors, onTap: () -> Unit, onLink: (String) -> Unit, modifier: Modifier) {
-    val data = rows.filterIndexed { i, _ -> i != 1 }.map { Markdown.cells(it) }
-    val cols = data.maxOf { it.size }
-    val line = MaterialTheme.colorScheme.outlineVariant
-    Column(modifier.border(1.dp, line, RoundedCornerShape(6.dp))) {
-        data.forEachIndexed { r, cells ->
-            if (r > 0) HorizontalDivider(color = line)
-            Row(Modifier.fillMaxWidth().then(if (r == 0) Modifier.background(MaterialTheme.colorScheme.surfaceVariant) else Modifier)) {
-                for (ci in 0 until cols) {
-                    MdText(
-                        Markdown.render(cells.getOrElse(ci) { "" }, c),
-                        MaterialTheme.typography.bodyMedium.copy(fontWeight = if (r == 0) FontWeight.Bold else FontWeight.Normal),
-                        onTap, onLink,
-                        Modifier.weight(1f).padding(horizontal = 8.dp, vertical = 6.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Read view: rendered lines, tappable checkboxes. */
-@Composable
-private fun MarkdownView(
-    body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, onLink: (String) -> Unit, modifier: Modifier,
-) {
-    val base = MaterialTheme.typography.bodyLarge
-    val lines = body.split("\n")
-    // table blocks: header row followed by a |---| separator
-    val tableAt = mutableMapOf<Int, Int>() // start line -> end (exclusive)
-    var k = 0
-    while (k < lines.size) {
-        if (Markdown.isTableRow(lines[k]) && k + 1 < lines.size && Markdown.TABLE_SEP.matches(lines[k + 1])) {
-            var e = k + 2
-            while (e < lines.size && Markdown.isTableRow(lines[e])) e++
-            tableAt[k] = e; k = e
-        } else k++
-    }
-    Column(modifier) {
-        var skipUntil = -1
-        lines.forEachIndexed { i, line ->
-          if (i < skipUntil) return@forEachIndexed
-          val tableEnd = tableAt[i]
-          if (tableEnd != null) {
-              skipUntil = tableEnd
-              val edit = { onEdit(tableEnd - 1) }
-              MdTable(lines.subList(i, tableEnd), c, edit, onLink, Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable(onClick = edit))
-              return@forEachIndexed
-          }
-          val edit = { onEdit(i) }
-          Box(Modifier.fillMaxWidth().clickable(onClick = edit)) {
-            val task = Markdown.TASK.find(line)
-            val head = Markdown.HEADING.find(line)
-            val bullet = Markdown.BULLET.find(line)
-            val lead = line.takeWhile { it == ' ' || it == '\t' }
-            val indent = (lead.count { it == ' ' } + lead.count { it == '\t' } * 4).coerceAtMost(16) * 6
-            when {
-                task != null -> Row(Modifier.padding(start = indent.dp), verticalAlignment = Alignment.CenterVertically) {
-                    val done = task.groupValues[2] != " "
-                    Checkbox(checked = done, onCheckedChange = { onToggle(i) })
-                    MdText(
-                        Markdown.render(line.substring(task.value.length), c),
-                        base.copy(
-                            textDecoration = if (done) TextDecoration.LineThrough else null,
-                            color = if (done) c.marker else MaterialTheme.colorScheme.onSurface,
-                        ),
-                        edit, onLink,
-                    )
-                }
-                head != null -> MdText(
-                    Markdown.render(line.substring(head.value.length), c),
-                    when (head.groupValues[1].length) {
-                        1 -> MaterialTheme.typography.headlineSmall
-                        2 -> MaterialTheme.typography.titleLarge
-                        else -> MaterialTheme.typography.titleMedium
-                    }.copy(fontWeight = FontWeight.Bold),
-                    edit, onLink, Modifier.padding(top = 8.dp, bottom = 2.dp),
-                )
-                bullet != null -> Row(Modifier.padding(start = indent.dp, top = 2.dp)) {
-                    val mark = bullet.groupValues[1]
-                    Text(if (mark[0].isDigit()) "$mark " else "•  ", style = base, color = c.marker)
-                    MdText(Markdown.render(line.substring(bullet.value.length), c), base, edit, onLink)
-                }
-                line.startsWith(">") -> MdText(
-                    Markdown.render(line.removePrefix(">").trimStart(), c),
-                    base.copy(fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.secondary),
-                    edit, onLink, Modifier.padding(start = 12.dp, top = 2.dp),
-                )
-                line.trim() == "---" -> HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                line.isBlank() -> Spacer(Modifier.height(10.dp))
-                else -> MdText(Markdown.render(line, c), base, edit, onLink)
-            }
-          }
-        }
-    }
-}
-
-/**
- * Rendered text whose links react to taps; a tap anywhere else calls [onTap].
- * Own gesture handling instead of LinkAnnotation, because the surrounding line/table/view
- * is itself clickable (tap = edit) and must not swallow or race with link taps.
- */
-@Composable
-private fun MdText(text: AnnotatedString, style: TextStyle, onTap: () -> Unit, onLink: (String) -> Unit, modifier: Modifier = Modifier) {
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val tapNow by rememberUpdatedState(onTap)
-    val linkNow by rememberUpdatedState(onLink)
-    val hasLinks = remember(text) { text.getStringAnnotations(Markdown.LINK_TAG, 0, text.length).isNotEmpty() }
-    val tap = if (!hasLinks) modifier else modifier.pointerInput(text) {
-        detectTapGestures { pos ->
-            val l = layout
-            val line = l?.getLineForVerticalPosition(pos.y)
-            val inside = l != null && line != null && pos.x >= l.getLineLeft(line) && pos.x <= l.getLineRight(line)
-            val off = if (inside) l!!.getOffsetForPosition(pos) else -1
-            val hit = if (off < 0) null else text.getStringAnnotations(Markdown.LINK_TAG, off, off + 1).firstOrNull()
-            if (hit != null) linkNow(hit.item) else tapNow()
-        }
-    }
-    Text(text, tap, style = style, onTextLayout = { layout = it })
-}
-
-/** Web links open in the browser, everything else is looked up as a note in the vault. */
-private fun openLink(ctx: android.content.Context, vm: AppVM, raw: String) {
-    when (val t = Markdown.linkTarget(raw)) {
-        is Markdown.Target.Web -> try {
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(t.uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (_: Exception) {
-            Toast.makeText(ctx, "Keine App für diesen Link", Toast.LENGTH_SHORT).show()
-        }
-        is Markdown.Target.Note -> if (!vm.openNote(t.name)) Toast.makeText(ctx, "Notiz „${t.name}“ nicht gefunden", Toast.LENGTH_SHORT).show()
-    }
-}
-
 // ---------------- settings ----------------
 
 @Composable
@@ -1022,6 +872,8 @@ fun SettingsScreen(vm: AppVM) {
     val tick = vm.tick
     val hasToken = remember(tick, vm.busy) { Secrets.get(ctx) != null }
     val files = remember(tick) { Environment.isExternalStorageManager() }
+    val storage = remember(tick, vm.busy) { Prefs.load(ctx).storage }
+    var askStorage by remember { mutableStateOf<Storage?>(null) }
     val notif = remember(tick) {
         ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
@@ -1044,8 +896,20 @@ fun SettingsScreen(vm: AppVM) {
                 .verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("1. Berechtigungen", style = MaterialTheme.typography.titleMedium)
-            Permission("Zugriff auf alle Dateien (für den gemeinsamen Ordner mit Obsidian)", files) {
+            Text("1. Speicherort & Berechtigungen", style = MaterialTheme.typography.titleMedium)
+            StorageChoice(
+                Storage.Shared, storage, "Mit Obsidian teilen",
+                "Documents/${folder.ifBlank { "Vault" }} – Obsidian auf dem Handy kann den Vault öffnen, " +
+                    "aber auch jede andere App mit Dateizugriff kann ihn lesen.",
+                enabled = !vm.busy,
+            ) { askStorage = it }
+            StorageChoice(
+                Storage.Private, storage, "Nur in dieser App (privat)",
+                "Andere Apps können die Notizen nicht lesen. Obsidian auf dem Handy hat keinen Zugriff; " +
+                    "der Abgleich mit dem Mac über GitHub läuft weiter.",
+                enabled = !vm.busy,
+            ) { askStorage = it }
+            if (storage == Storage.Shared) Permission("Zugriff auf alle Dateien (für den gemeinsamen Ordner mit Obsidian)", files) {
                 ctx.startActivity(
                     Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}"))
                 )
@@ -1062,7 +926,7 @@ fun SettingsScreen(vm: AppVM) {
                 label = { Text(if (hasToken) "Token (gespeichert, leer lassen)" else "Fine-grained Token") },
                 visualTransformation = PasswordVisualTransformation(),
             )
-            OutlinedTextField(folder, { folder = it }, Modifier.fillMaxWidth(), singleLine = true,
+            if (storage == Storage.Shared) OutlinedTextField(folder, { folder = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text("Ordnername in Documents/") })
             OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("Name für Commits") })
             OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("E-Mail für Commits") })
@@ -1072,13 +936,46 @@ fun SettingsScreen(vm: AppVM) {
                 label = { Text("Uhrzeit, wenn nur ein Datum gesetzt ist (HH:MM)") })
 
             Button(
-                enabled = !vm.busy && files && url.isNotBlank() && (token.isNotBlank() || hasToken),
-                onClick = { vm.setup(Prefs(url, folder, name, email, time), token); token = "" },
+                enabled = !vm.busy && (files || storage == Storage.Private) && url.isNotBlank() && (token.isNotBlank() || hasToken),
+                onClick = {
+                    vm.setup(Prefs.load(ctx).copy(repoUrl = url, folder = folder, name = name, email = email, defaultTime = time), token)
+                    token = ""
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (ready) "Speichern & synchronisieren" else "Speichern & klonen") }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (vm.status.isNotBlank()) Text(vm.status, style = MaterialTheme.typography.bodySmall)
             LockSettings()
+            askStorage?.let { to ->
+                val cloned = remember { GitSync.isCloned(ctx) }
+                AlertDialog(
+                    onDismissRequest = { askStorage = null },
+                    title = { Text(if (to == Storage.Private) "Vault privat speichern?" else "Vault mit Obsidian teilen?") },
+                    text = {
+                        Text(
+                            when {
+                                !cloned -> "Der Vault wird beim Klonen dort angelegt."
+                                to == Storage.Private -> "Der Vault wird aus Documents/ in den App-Speicher verschoben. " +
+                                    "Obsidian auf dem Handy findet ihn danach nicht mehr. Nicht synchronisierte Änderungen bleiben erhalten."
+                                else -> "Der Vault wird nach Documents/${folder.ifBlank { "Vault" }} verschoben und ist dann " +
+                                    "für Obsidian und andere Apps mit Dateizugriff lesbar." +
+                                    if (!files) " Dafür zuerst „Zugriff auf alle Dateien“ erlauben." else ""
+                            },
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(
+                            enabled = to == Storage.Private || files,
+                            onClick = {
+                                if (folder.isNotBlank() && folder != Prefs.load(ctx).folder) Prefs.save(ctx, Prefs.load(ctx).copy(folder = folder))
+                                vm.changeStorage(to)
+                                askStorage = null
+                            },
+                        ) { Text(if (cloned) "Verschieben" else "Übernehmen") }
+                    },
+                    dismissButton = { TextButton({ askStorage = null }) { Text("Abbrechen") } },
+                )
+            }
             Text(
                 "Vault-Ordner: " + Vault.dir(ctx).path,
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
@@ -1094,98 +991,20 @@ fun SettingsScreen(vm: AppVM) {
     }
 }
 
-/** "4. App-Sperre": set, change or remove the PIN and choose when the app locks. */
 @Composable
-private fun LockSettings() {
-    val ctx = LocalContext.current
-    var on by remember { mutableStateOf(AppLock.enabled(ctx)) }
-    var delay by remember { mutableStateOf(AppLock.delay(ctx)) }
-    var mode by remember { mutableStateOf<PinMode?>(null) }
-
-    Text("4. App-Sperre", style = MaterialTheme.typography.titleMedium)
-    Text(
-        if (on) "PIN aktiv. Die App sperrt sich, wenn sie im Hintergrund war."
-        else "Schützt die App mit einer PIN. Die Dateien im Vault-Ordner bleiben unverschlüsselt.",
-        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
-    )
-    if (!on) OutlinedButton(onClick = { mode = PinMode.Set }, modifier = Modifier.fillMaxWidth()) { Text("PIN festlegen") }
-    else {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { mode = PinMode.Change }, modifier = Modifier.weight(1f)) { Text("PIN ändern") }
-            OutlinedButton(onClick = { mode = PinMode.Remove }, modifier = Modifier.weight(1f)) { Text("PIN entfernen") }
-        }
-        Text("Sperren nach", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (d in AppLock.DELAYS) FilterChip(
-                selected = delay == d,
-                onClick = { delay = d; AppLock.setDelay(ctx, d) },
-                label = { Text(when (d) { 0 -> "Sofort"; else -> "${d / 60} Min." }) },
-            )
+private fun StorageChoice(
+    value: Storage, current: Storage, title: String, detail: String, enabled: Boolean, onPick: (Storage) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = enabled && value != current) { onPick(value) },
+        verticalAlignment = Alignment.Top,
+    ) {
+        RadioButton(selected = value == current, onClick = { onPick(value) }, enabled = enabled && value != current)
+        Column(Modifier.padding(top = 12.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
         }
     }
-    mode?.let { m -> PinDialog(m, onDone = { mode = null; on = AppLock.enabled(ctx) }) }
-}
-
-private enum class PinMode { Set, Change, Remove }
-
-@Composable
-private fun PinDialog(mode: PinMode, onDone: () -> Unit) {
-    val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var old by remember { mutableStateOf("") }
-    var new1 by remember { mutableStateOf("") }
-    var new2 by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf("") }
-    var working by remember { mutableStateOf(false) }
-    val needOld = mode != PinMode.Set
-    val needNew = mode != PinMode.Remove
-    val digits = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-    fun field(v: String, set: (String) -> Unit, label: String) = @Composable {
-        OutlinedTextField(
-            v, { t -> set(t.filter { it.isDigit() }.take(AppLock.MAX_LEN)); error = "" }, Modifier.fillMaxWidth(),
-            label = { Text(label) }, singleLine = true, keyboardOptions = digits,
-            visualTransformation = PasswordVisualTransformation(),
-        )
-    }
-
-    fun confirm() {
-        if (needNew && !AppLock.validPin(new1)) { error = "PIN: ${AppLock.MIN_LEN}–${AppLock.MAX_LEN} Ziffern"; return }
-        if (needNew && new1 != new2) { error = "PINs stimmen nicht überein"; return }
-        working = true
-        scope.launch {
-            val ok = withContext(Dispatchers.Default) {
-                if (needOld && !AppLock.check(ctx, old)) return@withContext false
-                if (needNew) AppLock.setPin(ctx, new1) else AppLock.clear(ctx)
-                true
-            }
-            working = false
-            if (ok) {
-                Toast.makeText(ctx, if (needNew) "PIN gespeichert" else "PIN entfernt", Toast.LENGTH_SHORT).show()
-                onDone()
-            } else {
-                val wait = AppLock.waitMs(ctx)
-                error = if (wait > 0) "Falsche PIN – warten ${(wait + 999) / 1000} s" else "Aktuelle PIN falsch"
-                old = ""
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = onDone,
-        title = { Text(when (mode) { PinMode.Set -> "PIN festlegen"; PinMode.Change -> "PIN ändern"; PinMode.Remove -> "PIN entfernen" }) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (needOld) field(old, { old = it }, "Aktuelle PIN")()
-                if (needNew) {
-                    field(new1, { new1 = it }, "Neue PIN (${AppLock.MIN_LEN}–${AppLock.MAX_LEN} Ziffern)")()
-                    field(new2, { new2 = it }, "Neue PIN wiederholen")()
-                }
-                if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-        },
-        confirmButton = { TextButton(onClick = ::confirm, enabled = !working) { Text("OK") } },
-        dismissButton = { TextButton(onClick = onDone) { Text("Abbrechen") } },
-    )
 }
 
 @Composable

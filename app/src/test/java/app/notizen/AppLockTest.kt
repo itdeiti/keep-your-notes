@@ -1,6 +1,7 @@
 package app.notizen
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,5 +21,13 @@ class AppLockTest {
         assertArrayEquals(h, AppLock.hash("1234", salt, iter = 1000))
         assertFalse(h.contentEquals(AppLock.hash("1235", salt, iter = 1000)))
         assertFalse(h.contentEquals(AppLock.hash("1234", ByteArray(16), iter = 1000)))
+    }
+
+    @Test fun penaltyStartsAtFifthFailureAndDoublesUpToOneHour() {
+        assertEquals(0L, AppLock.penaltyMs(4))
+        assertEquals(30_000L, AppLock.penaltyMs(5))
+        assertEquals(60_000L, AppLock.penaltyMs(6))
+        assertEquals(3_600_000L, AppLock.penaltyMs(12))
+        assertEquals(3_600_000L, AppLock.penaltyMs(100))
     }
 }

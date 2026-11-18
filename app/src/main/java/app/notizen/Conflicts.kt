@@ -11,6 +11,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 /**
  * Conflict copies from [GitSync]: "Einkauf (Konflikt Handy 2026-11-17 1432).md" next to "Einkauf.md".
@@ -22,6 +24,14 @@ object Conflicts {
     private val COPY = Regex("""^(.*) \(Konflikt Handy \d{4}-\d{2}-\d{2} \d{4}\)(\.[^./]+)?$""")
 
     fun isCopy(path: String) = COPY.matches(path)
+
+    /** "inbox/Einkauf.md" -> "inbox/Einkauf (Konflikt Handy 2026-11-17 1432).md". */
+    fun copyPath(path: String, at: LocalDateTime = LocalDateTime.now()): String {
+        val stamp = at.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HHmm"))
+        val ext = path.substringAfterLast('/').substringAfterLast('.', "")
+        val base = if (ext.isEmpty()) path else path.removeSuffix(".$ext")
+        return "$base (Konflikt Handy $stamp)" + if (ext.isEmpty()) "" else ".$ext"
+    }
 
     /** "inbox/Einkauf (Konflikt Handy …).md" -> "inbox/Einkauf.md", null if not a conflict copy. */
     fun original(path: String): String? = COPY.find(path)?.let { it.groupValues[1] + it.groupValues[2] }

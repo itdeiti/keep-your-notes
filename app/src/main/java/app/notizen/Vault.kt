@@ -123,11 +123,43 @@ object Vault {
     private val skip = setOf(".git", ".obsidian", ".trash")
     private val stamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HHmm")
 
+    fun dir(ctx: Context): File = Prefs.load(ctx).let { dirFor(ctx, it.storage, it.folder) }
+
     @Suppress("DEPRECATION")
-    fun dir(ctx: Context): File = File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
-        Prefs.load(ctx).folder,
-    )
+    fun dirFor(ctx: Context, storage: Storage, folder: String): File = when (storage) {
+        Storage.Shared -> File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), folder)
+        Storage.Private -> File(ctx.filesDir, "vault")
+    }
+
+    /** Can the app read and write the vault location (shared storage needs "all files" access)? */
+    fun accessible(ctx: Context) = Prefs.load(ctx).storage == Storage.Private || Environment.isExternalStorageManager()
+
+    /**
+     * Move the whole vault (with .git) to [to] and switch the setting. Copy first, switch, then delete
+     * the old copy, so an interrupted move never leaves the app without its notes. Caller holds the git lock.
+     */
+    fun relocate(ctx: Context, to: Storage) {
+        val p = Prefs.load(ctx)
+        if (p.storage == to) return
+        val from = dirFor(ctx, p.storage, p.folder)
+        val target = dirFor(ctx, to, p.folder)
+        if (from.isDirectory) {
+            if (target.exists() && target.list()?.isNotEmpty() == true) error("Zielordner ${target.path} ist nicht leer")
+            // copy next to the target, then rename: a killed copy leaves only a temp folder behind
+            val tmp = File(target.parentFile, target.name + ".tmp")
+            tmp.deleteRecursively()
+            try {
+                if (!from.copyRecursively(tmp, overwrite = false)) error("Kopieren fehlgeschlagen")
+                target.delete() // empty or missing
+                if (!tmp.renameTo(target)) error("Umbenennen fehlgeschlagen")
+            } catch (e: Exception) {
+                tmp.deleteRecursively()
+                throw e
+            }
+        }
+        Prefs.save(ctx, p.copy(storage = to))
+        from.deleteRecursively()
+    }
 
     fun all(ctx: Context): List<Note> {
         val root = dir(ctx)
@@ -175,6 +207,19 @@ object Vault {
         while (File(root, target).exists()) target = (if (p.isEmpty()) "" else "$p/") + "$name ${n++}"
         File(root, target).parentFile?.mkdirs()
         return if (File(root, s).renameTo(File(root, target))) target else null
+    }
+
+    /**
+     * [path] as a note file inside [root], or null if it points elsewhere (`..`, absolute, dot folders,
+     * not Markdown). For paths that come from intents.
+     */
+    fun safeFile(root: File, path: String): File? {
+        val r = root.canonicalFile
+        val f = File(r, path).canonicalFile
+        val rel = f.relativeToOrNull(r)?.path ?: return null
+        if (rel.isEmpty() || rel.startsWith("..") || f.extension != "md") return null
+        if (rel.split(File.separatorChar).any { it.startsWith(".") }) return null
+        return f
     }
 
     fun read(root: File, f: File): Note {

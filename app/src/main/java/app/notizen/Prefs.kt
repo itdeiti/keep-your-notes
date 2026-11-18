@@ -13,12 +13,21 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+/**
+ * Where the vault lives on the phone.
+ * [Shared]: Documents/<folder>, so Obsidian on the phone can open it, but every app with
+ * "all files" access can read it too. [Private]: app-private storage, readable only by this app
+ * (Android sandbox, encrypted by the device); notes still reach the Mac through GitHub.
+ */
+enum class Storage { Shared, Private }
+
 data class Prefs(
     val repoUrl: String = "",
     val folder: String = "Vault",
     val name: String = "",
     val email: String = "",
     val defaultTime: String = "09:00",
+    val storage: Storage = Storage.Shared,
 ) {
     companion object {
         private fun sp(ctx: Context) = ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE)
@@ -32,6 +41,7 @@ data class Prefs(
                 name = p.getString("name", d.name)!!,
                 email = p.getString("email", d.email)!!,
                 defaultTime = p.getString("defaultTime", d.defaultTime)!!,
+                storage = runCatching { Storage.valueOf(p.getString("storage", d.storage.name)!!) }.getOrDefault(d.storage),
             )
         }
 
@@ -42,7 +52,8 @@ data class Prefs(
                 .putString("name", p.name.trim())
                 .putString("email", p.email.trim())
                 .putString("defaultTime", p.defaultTime.trim())
-                .apply()
+                .putString("storage", p.storage.name)
+                .commit() // Vault.dir reads it right away (e.g. right after moving the vault)
         }
     }
 }

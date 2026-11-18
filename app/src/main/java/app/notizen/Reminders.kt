@@ -112,7 +112,7 @@ object Reminders {
 
     /** Tick or untick the task [line] in [path], commit, push later, refresh alarms and widget. */
     suspend fun toggle(ctx: Context, path: String, line: String, onlyOpen: Boolean = false) {
-        val f = File(Vault.dir(ctx), path)
+        val f = Vault.safeFile(Vault.dir(ctx), path) ?: return
         if (!f.exists()) return
         val text = f.readText()
         val idx = text.split("\n").indexOfFirst { it.trimEnd('\r') == line }
