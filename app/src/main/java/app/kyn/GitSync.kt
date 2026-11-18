@@ -12,6 +12,8 @@ import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.ObjectId
 import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.lib.RepositoryCache
+import org.eclipse.jgit.util.FS
 import org.eclipse.jgit.revwalk.RevWalk
 import org.eclipse.jgit.transport.CredentialsProvider
 import org.eclipse.jgit.transport.RefSpec
@@ -28,7 +30,51 @@ import java.time.LocalDateTime
 object GitSync {
     private val mutex = Mutex()
 
-    fun isCloned(ctx: Context) = File(Vault.dir(ctx), ".git").isDirectory
+    /** A real repository, not just a `.git` folder left behind by a failed clone. */
+    fun isCloned(ctx: Context) = isRepo(Vault.dir(ctx))
+
+    internal fun isRepo(dir: File) = RepositoryCache.FileKey.isGitRepository(File(dir, ".git"), FS.DETECTED)
+
+    /**
+     * Clone into [dir] with [clone] (which must create the folder it gets). A leftover `.git` from a
+     * failed clone is thrown away; files already in [dir] (notes written meanwhile, an existing folder)
+     * are kept: the clone goes into a sibling folder first, the files are copied into it (existing
+     * ones with other content as conflict copies), then the clone takes the folder's place.
+     * Returns how many existing files were taken over.
+     */
+    internal fun cloneInto(dir: File, clone: (File) -> Unit): Int {
+        val userFiles = dir.exists() && dir.list()?.any { it != ".git" && it != ".gitignore" } == true
+        if (!userFiles) {
+            dir.deleteRecursively()
+            dir.parentFile?.mkdirs()
+            clone(dir) // JGit removes the folder again if this fails
+            return 0
+        }
+        val fresh = File(dir.parentFile, dir.name + ".clone").apply { deleteRecursively() }
+        clone(fresh)
+        val kept = keepFiles(dir, fresh)
+        val old = File(dir.parentFile, dir.name + ".old").apply { deleteRecursively() }
+        if (!dir.renameTo(old)) error("Renaming ${dir.path} failed")
+        if (!fresh.renameTo(dir)) { old.renameTo(dir); error("Renaming ${fresh.path} failed") }
+        old.deleteRecursively()
+        return kept
+    }
+
+    /** Copy every file of [from] (except `.git/`) into the work tree [into]; same path, other content -> conflict copy. */
+    internal fun keepFiles(from: File, into: File): Int {
+        var n = 0
+        from.walkTopDown().onEnter { it == from || it.name != ".git" }.filter { it.isFile }.forEach { f ->
+            val rel = f.relativeTo(from).path
+            if (rel == ".gitignore") return@forEach // the repo's own wins
+            val dest = File(into, rel)
+            if (dest.exists() && dest.readBytes().contentEquals(f.readBytes())) return@forEach
+            val target = if (dest.exists()) File(into, Conflicts.copyPath(rel)) else dest
+            target.parentFile?.mkdirs()
+            f.copyTo(target)
+            n++
+        }
+        return n
+    }
 
     private fun creds(ctx: Context) =
         UsernamePasswordCredentialsProvider("x-access-token", Secrets.get(ctx) ?: "")
@@ -47,6 +93,8 @@ object GitSync {
         git.repository.config.apply {
             setString("user", null, "name", id.name)
             setString("user", null, "email", id.emailAddress)
+            // the URL from the settings wins: changing it there must reach the existing clone too
+            Prefs.load(ctx).repoUrl.takeIf { it.isNotBlank() }?.let { setString("remote", "origin", "url", it) }
             save()
         }
         return git
@@ -57,12 +105,11 @@ object GitSync {
 
     suspend fun cloneOrOpen(ctx: Context) = locked {
         val dir = Vault.dir(ctx)
-        if (File(dir, ".git").isDirectory) return@locked
-        if (dir.list()?.isNotEmpty() == true) error(ctx.getString(R.string.err_folder_not_empty, dir.path))
-        dir.mkdirs()
-        Git.cloneRepository()
+        if (isRepo(dir)) return@locked
+        cloneInto(dir) { target ->
+          Git.cloneRepository()
             .setURI(Prefs.load(ctx).repoUrl)
-            .setDirectory(dir)
+            .setDirectory(target)
             .setCredentialsProvider(creds(ctx))
             .call().use { git ->
                 val repo = git.repository
@@ -75,6 +122,7 @@ object GitSync {
                 // Empty GitHub repo: start on "main" instead of JGit's default "master".
                 if (repo.resolve(Constants.HEAD) == null) repo.updateRef(Constants.HEAD).link("refs/heads/main")
             }
+        }
         val ignore = File(dir, ".gitignore")
         if (!ignore.exists()) ignore.writeText(".obsidian/workspace*.json\n.trash/\n")
         Unit
@@ -190,15 +238,21 @@ object GitSync {
         }
     }
 
-    /** Short reason for the status line, in the app's language. */
+    /** Short reason for the status line, in the app's language, plus the technical cause where it helps. */
     fun explain(ctx: Context, e: Throwable): String {
-        val all = generateSequence(e) { it.cause }.joinToString(" | ") { it.message ?: it.javaClass.simpleName }
+        val chain = generateSequence(e) { it.cause }.toList()
+        val all = chain.joinToString(" | ") { it.message ?: it.javaClass.simpleName }
+        val raw = (chain.last().message ?: chain.last().javaClass.simpleName).take(160)
         return when {
+            // local: the vault folder exists but is not a readable Git repository (missing file access?)
+            chain.any { it is org.eclipse.jgit.errors.RepositoryNotFoundException } ->
+                ctx.getString(R.string.err_vault_unreadable, raw)
             Regex("not authorized|Authentication is required|401|403", RegexOption.IGNORE_CASE)
                 .containsMatchIn(all) -> ctx.getString(R.string.err_token)
             Regex("UnknownHost|Unable to resolve host|timed out|Network is unreachable", RegexOption.IGNORE_CASE)
                 .containsMatchIn(all) -> ctx.getString(R.string.err_offline)
-            Regex("not found|404", RegexOption.IGNORE_CASE).containsMatchIn(all) -> ctx.getString(R.string.err_repo_not_found)
+            Regex("not found|404", RegexOption.IGNORE_CASE).containsMatchIn(all) ->
+                ctx.getString(R.string.err_repo_not_found, Prefs.load(ctx).repoUrl, raw)
             else -> e.message ?: e.javaClass.simpleName
         }
     }

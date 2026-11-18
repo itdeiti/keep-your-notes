@@ -92,7 +92,9 @@
     <string name="status_cloning">Cloning …</string>
     <string name="err_token">GitHub token wrong, expired or without write access</string>
     <string name="err_offline">No network – will push later</string>
-    <string name="err_repo_not_found">Repository not found: check the URL</string>
+    <!-- %1$s = repo URL from the settings, %2$s = technical cause -->
+    <string name="err_repo_not_found">Repository not found: %1$s – check the URL and that the token has access to this repository (%2$s)</string>
+    <string name="err_vault_unreadable">Vault folder not readable – allow file access or choose private storage (%1$s)</string>
     <string name="err_folder_not_empty">Folder %1$s is not empty</string>
     <string name="err_copy_failed">Copying failed</string>
     <string name="err_rename_failed">Renaming failed</string>

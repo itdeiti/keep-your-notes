@@ -98,4 +98,33 @@ class GitSyncTest {
         GitSync.syncRepo(mac, null, macId)
         assertFalse(File(mac.repository.workTree, "inbox/Einkauf.md").exists())
     }
+
+    private fun cloneRemote(target: File) =
+        Git.cloneRepository().setURI(File(tmp.root, "remote.git").toURI().toString()).setDirectory(target).call().close()
+
+    @Test fun brokenCloneLeftoverIsReplacedByAFreshClone() {
+        val dir = File(tmp.root, "vault")
+        File(dir, ".git/objects").mkdirs() // what a failed clone can leave behind
+        File(dir, ".gitignore").writeText(".trash/\n")
+        assertFalse(GitSync.isRepo(dir))
+        assertEquals(0, GitSync.cloneInto(dir, ::cloneRemote))
+        assertTrue(GitSync.isRepo(dir))
+        assertEquals("- [ ] Milch\n- [ ] Brot\n- [ ] Käse\n", File(dir, "inbox/Einkauf.md").readText())
+    }
+
+    @Test fun filesAlreadyInTheFolderAreKeptNextToTheClone() {
+        val dir = File(tmp.root, "vault")
+        File(dir, ".git").mkdirs()
+        File(dir, "inbox").mkdirs()
+        File(dir, "inbox/Neu.md").writeText("nur auf dem Handy")
+        File(dir, "inbox/Einkauf.md").writeText("- [ ] Eier\n") // differs from the server
+        assertEquals(2, GitSync.cloneInto(dir, ::cloneRemote))
+        assertTrue(GitSync.isRepo(dir))
+        assertEquals("nur auf dem Handy", File(dir, "inbox/Neu.md").readText())
+        assertEquals("- [ ] Milch\n- [ ] Brot\n- [ ] Käse\n", File(dir, "inbox/Einkauf.md").readText())
+        val copy = File(dir, "inbox").listFiles()!!.single { Conflicts.isCopy("inbox/" + it.name) }
+        assertEquals("- [ ] Eier\n", copy.readText())
+        assertFalse(File(tmp.root, "vault.clone").exists())
+        assertFalse(File(tmp.root, "vault.old").exists())
+    }
 }
