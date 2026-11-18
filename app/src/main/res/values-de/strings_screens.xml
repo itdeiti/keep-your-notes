@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screens_back">Zurück</string>
+    <string name="screens_sync">Synchronisieren</string>
+    <string name="screens_settings">Einstellungen</string>
+    <string name="screens_cancel">Abbrechen</string>
+    <string name="screens_delete">Löschen</string>
+    <string name="screens_close">Schließen</string>
+
+    <string name="list_title">Notizen</string>
+    <string name="list_new_note">Neue Notiz</string>
+    <string name="list_search_hint">Suchen, #tag für Tags</string>
+    <plurals name="list_conflicts">
+        <item quantity="one">⚠ %d Konflikt</item>
+        <item quantity="other">⚠ %d Konflikte</item>
+    </plurals>
+    <string name="list_tags_chip">Tags…</string>
+
+    <string name="tasks_title">Aufgaben</string>
+    <string name="tasks_empty">Keine offenen Aufgaben.</string>
+
+    <string name="editor_no_speech">Keine Spracherkennung gefunden</string>
+    <string name="editor_due_no_time">Ohne Uhrzeit</string>
+    <string name="editor_delete_title">Notiz löschen?</string>
+    <string name="editor_delete_text">Bleibt in der Git-Historie erhalten.</string>
+    <string name="editor_edit">Bearbeiten</string>
+    <string name="editor_view">Ansehen</string>
+    <string name="editor_title_hint">Titel</string>
+    <string name="editor_body_hint">Notiz</string>
+
+    <string name="conflict_keep_title">Handy-Version behalten?</string>
+    <string name="conflict_discard_title">Kopie verwerfen?</string>
+    <string name="conflict_keep_text">Diese Kopie ersetzt „%1$s“. Die Server-Version bleibt in der Git-Historie.</string>
+    <string name="conflict_discard_text">„%1$s“ bleibt wie auf dem Server, diese Kopie wird gelöscht (bleibt in der Git-Historie).</string>
+    <string name="conflict_keep">Behalten</string>
+    <string name="conflict_discard">Verwerfen</string>
+    <string name="conflict_banner">Konfliktkopie: So stand die Notiz auf dem Handy, als „%1$s“ gleichzeitig woanders geändert wurde.</string>
+    <string name="conflict_original">Original</string>
+    <string name="conflict_keep_this">Diese behalten</string>
+
+    <string name="recur_dialog_title">Wiederholen</string>
+    <string name="recur_dialog_when_done">ab Erledigung zählen</string>
+    <string name="recur_dialog_none">Nicht wiederholen</string>
+
+    <string name="props_title">Eigenschaften</string>
+    <string name="props_title_count">Eigenschaften (%1$d)</string>
+    <string name="props_pick_date">Datum wählen</string>
+    <string name="props_empty">leer</string>
+    <string name="props_add">＋ Eigenschaft</string>
+    <string name="props_add_title">Eigenschaft hinzufügen</string>
+    <string name="props_add_name">Name</string>
+    <string name="props_add_name_hint">z.B. due, ort, quelle</string>
+    <string name="props_add_type_text">Text</string>
+    <string name="props_add_type_date">Datum</string>
+    <string name="props_add_value">Wert</string>
+    <string name="props_add_confirm">Hinzufügen</string>
+
+    <string name="move_title">Verschieben nach</string>
+    <string name="move_new_folder">Neuer Ordner</string>
+    <string name="move_new_folder_hint">z.B. projekte/umzug-2027</string>
+    <string name="move_to_new_folder">In neuen Ordner</string>
+
+    <string name="folders_title">Ordner</string>
+    <string name="folders_all">Alle Notizen</string>
+    <string name="folders_move">Verschieben</string>
+    <string name="folders_move_failed">Geht nicht</string>
+    <string name="folders_move_title">„%1$s“ verschieben nach</string>
+    <string name="folders_top_level">📁 / (oberste Ebene)</string>
+    <string name="folders_new_target">Neuer Zielordner</string>
+    <string name="folders_new_target_hint">z.B. archiv/2026</string>
+    <string name="folders_move_here">Dorthin</string>
+
+    <string name="tags_filter_title">Nach Tag filtern</string>
+    <string name="tags_filter_hint">Tag suchen</string>
+    <string name="tags_filter_none">Kein Tag gefunden</string>
+    <string name="tags_add_chip">＋ Tag</string>
+    <string name="tags_dialog_title">Tag hinzufügen</string>
+    <string name="tags_dialog_hint">suchen oder neu</string>
+    <string name="tags_dialog_new">Neu: #%1$s</string>
+    <string name="tags_dialog_done">Fertig</string>
+
+    <string name="settings_title">Einrichten</string>
+    <string name="settings_storage_section">1. Speicherort &amp; Berechtigungen</string>
+    <string name="settings_storage_shared_title">Mit Obsidian teilen</string>
+    <string name="settings_storage_shared_detail">Documents/%1$s – Obsidian auf dem Handy kann den Vault öffnen, aber auch jede andere App mit Dateizugriff kann ihn lesen.</string>
+    <string name="settings_storage_private_title">Nur in dieser App (privat)</string>
+    <string name="settings_storage_private_detail">Andere Apps können die Notizen nicht lesen. Obsidian auf dem Handy hat keinen Zugriff; der Abgleich mit dem Mac über GitHub läuft weiter.</string>
+    <string name="settings_leftover_warning">⚠ Der alte öffentliche Ordner %1$s existiert noch. Andere Apps können die Dateien darin lesen.</string>
+    <string name="settings_leftover_delete">Öffentlichen Ordner löschen</string>
+    <string name="settings_leftover_delete_title">Ordner löschen?</string>
+    <plurals name="settings_leftover_delete_text">
+        <item quantity="one">%1$s mit %2$d Datei wird endgültig gelöscht. Der Vault in der App und auf GitHub bleibt erhalten.</item>
+        <item quantity="other">%1$s mit %2$d Dateien wird endgültig gelöscht. Der Vault in der App und auf GitHub bleibt erhalten.</item>
+    </plurals>
+    <string name="settings_perm_files">Zugriff auf alle Dateien (für den gemeinsamen Ordner mit Obsidian)</string>
+    <string name="settings_perm_notifications">Benachrichtigungen (für Erinnerungen)</string>
+    <string name="settings_perm_allow">Erlauben</string>
+    <string name="settings_github_section">2. GitHub-Repo</string>
+    <string name="settings_repo_url">Repo-URL</string>
+    <string name="settings_token_saved">Token (gespeichert, leer lassen)</string>
+    <string name="settings_token">Fine-grained Token</string>
+    <string name="settings_folder_name">Ordnername in Documents/</string>
+    <string name="settings_commit_name">Name für Commits</string>
+    <string name="settings_commit_email">E-Mail für Commits</string>
+    <string name="settings_reminders_section">3. Erinnerungen</string>
+    <string name="settings_default_time">Uhrzeit, wenn nur ein Datum gesetzt ist (HH:MM)</string>
+    <string name="settings_save_sync">Speichern &amp; synchronisieren</string>
+    <string name="settings_save_clone">Speichern &amp; klonen</string>
+    <string name="settings_appearance_section">5. Darstellung</string>
+    <string name="settings_storage_private_ask">Vault privat speichern?</string>
+    <string name="settings_storage_shared_ask">Vault mit Obsidian teilen?</string>
+    <string name="settings_storage_not_cloned">Der Vault wird beim Klonen dort angelegt.</string>
+    <string name="settings_storage_to_private">Der Vault wird aus Documents/ in den App-Speicher verschoben. Obsidian auf dem Handy findet ihn danach nicht mehr. Nicht synchronisierte Änderungen bleiben erhalten.</string>
+    <string name="settings_storage_to_shared">Der Vault wird nach Documents/%1$s verschoben und ist dann für Obsidian und andere Apps mit Dateizugriff lesbar.</string>
+    <string name="settings_storage_to_shared_needs_files">Der Vault wird nach Documents/%1$s verschoben und ist dann für Obsidian und andere Apps mit Dateizugriff lesbar. Dafür zuerst „Zugriff auf alle Dateien“ erlauben.</string>
+    <string name="settings_storage_move">Verschieben</string>
+    <string name="settings_storage_apply">Übernehmen</string>
+    <string name="settings_vault_dir">Vault-Ordner: %1$s</string>
+    <string name="settings_version">Version %1$s (Build %2$d)</string>
+</resources>

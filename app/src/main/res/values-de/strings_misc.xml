@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PIN-Bildschirm -->
+    <string name="lock_title">Notizen gesperrt</string>
+    <string name="lock_enter_pin">PIN eingeben</string>
+    <string name="lock_wrong_pin">Falsche PIN</string>
+    <string name="lock_too_many_attempts">Zu viele Versuche – warten %1$d s</string>
+    <string name="lock_ok">OK</string>
+
+    <!-- PIN-Einstellungen -->
+    <string name="lock_settings_title">4. App-Sperre</string>
+    <string name="lock_settings_on">PIN aktiv. Die App sperrt sich, wenn sie im Hintergrund war.</string>
+    <string name="lock_settings_off">Schützt die App mit einer PIN. Die Dateien im Vault-Ordner bleiben unverschlüsselt.</string>
+    <string name="lock_set_pin">PIN festlegen</string>
+    <string name="lock_change_pin">PIN ändern</string>
+    <string name="lock_remove_pin">PIN entfernen</string>
+    <string name="lock_after">Sperren nach</string>
+    <string name="lock_delay_immediately">Sofort</string>
+    <string name="lock_delay_minutes">%1$d Min.</string>
+
+    <!-- PIN-Dialog -->
+    <string name="lock_pin_digits_error">PIN: %1$d–%2$d Ziffern</string>
+    <string name="lock_pins_differ">PINs stimmen nicht überein</string>
+    <string name="lock_pin_saved">PIN gespeichert</string>
+    <string name="lock_pin_removed">PIN entfernt</string>
+    <string name="lock_wrong_pin_wait">Falsche PIN – warten %1$d s</string>
+    <string name="lock_current_pin_wrong">Aktuelle PIN falsch</string>
+    <string name="lock_current_pin">Aktuelle PIN</string>
+    <string name="lock_new_pin">Neue PIN (%1$d–%2$d Ziffern)</string>
+    <string name="lock_repeat_pin">Neue PIN wiederholen</string>
+    <string name="lock_cancel">Abbrechen</string>
+
+    <!-- Notizliste-Widget einrichten -->
+    <string name="widgetcfg_title">Notizliste einrichten</string>
+    <string name="widgetcfg_cancel">Abbrechen</string>
+    <string name="widgetcfg_selection_count">Auswahl · %1$d</string>
+    <string name="widgetcfg_all_count">Alle Notizen · %1$d</string>
+    <string name="widgetcfg_reset">Zurücksetzen</string>
+    <string name="widgetcfg_save">Speichern</string>
+    <string name="widgetcfg_widget_title">Titel im Widget</string>
+    <string name="widgetcfg_content">Inhalt</string>
+    <string name="widgetcfg_hint">Ohne Auswahl unten zeigt das Widget alle Notizen. Mehrere Ordner, Tags und Notizen lassen sich kombinieren.</string>
+    <string name="widgetcfg_no_vault">Vault noch nicht eingerichtet – erst die App öffnen.</string>
+    <string name="widgetcfg_folders">Ordner (inkl. Unterordner)</string>
+    <string name="widgetcfg_root_folder">/ (Hauptordner)</string>
+    <string name="widgetcfg_tags">Tags</string>
+    <string name="widgetcfg_single_notes">Einzelne Notizen</string>
+    <string name="widgetcfg_search">Suchen …</string>
+
+    <!-- Schnelle Aufgabe -->
+    <string name="quicktask_saved">Aufgabe gespeichert</string>
+    <string name="quicktask_saved_on">Aufgabe gespeichert · %1$s</string>
+    <string name="quicktask_saved_at">Aufgabe gespeichert · %1$s %2$s</string>
+    <string name="quicktask_save_failed">Speichern fehlgeschlagen</string>
+    <string name="quicktask_remind_at">Erinnerung um</string>
+    <string name="quicktask_no_time">Ohne Uhrzeit</string>
+    <string name="quicktask_back">Zurück</string>
+    <string name="quicktask_title">Neue Aufgabe</string>
+    <string name="quicktask_placeholder">Was ist zu tun?</string>
+    <string name="quicktask_due">Fällig / Erinnerung</string>
+    <string name="quicktask_today">Heute</string>
+    <string name="quicktask_tomorrow">Morgen</string>
+    <string name="quicktask_pick_date">Datum …</string>
+    <string name="quicktask_next">Weiter</string>
+    <string name="quicktask_cancel">Abbrechen</string>
+    <string name="quicktask_no_date">Ohne Datum</string>
+
+    <!-- Links in der Notizansicht -->
+    <string name="mdview_no_app">Keine App für diesen Link</string>
+    <string name="mdview_link_blocked">Link-Typ aus Sicherheitsgründen gesperrt</string>
+    <string name="mdview_note_not_found">Notiz „%1$s“ nicht gefunden</string>
+</resources>

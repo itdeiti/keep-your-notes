@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="label_process_text">Als Notiz</string>
+    <string name="widget_quick_label">Schnellnotiz</string>
+    <string name="widget_list_label">Notizliste</string>
+    <string name="widget_config_label">Notizliste einrichten</string>
+    <string name="widget_task_label">Aufgabe</string>
+    <string name="widget_desc">Schnell eine Notiz, Liste oder Diktat anlegen</string>
+    <string name="widget_list_desc">Deine Notizen, Tippen öffnet zum Bearbeiten</string>
+    <string name="widget_task_desc">Aufgabe mit Fälligkeit und Erinnerung anlegen</string>
+
+    <string name="widget_note_hint">Notiz …</string>
+    <string name="widget_task_hint">Aufgabe …</string>
+    <string name="widget_list_title">Notizen</string>
+    <string name="widget_list_empty">Noch keine Notizen</string>
+    <string name="widget_list_empty_filtered">Nichts in dieser Auswahl</string>
+    <plurals name="widget_more">
+        <item quantity="one">+%d weitere</item>
+        <item quantity="other">+%d weitere</item>
+    </plurals>
+    <string name="widget_content_all">Alles</string>
+    <string name="widget_content_tasks">Nur Aufgaben</string>
+    <string name="widget_content_open_tasks">Nur offene Aufgaben</string>
+    <string name="widget_content_titles">Nur Titel</string>
+
+    <string name="recur_daily">täglich</string>
+    <string name="recur_weekly">wöchentlich</string>
+    <string name="recur_monthly">monatlich</string>
+    <string name="recur_yearly">jährlich</string>
+    <string name="recur_weekdays">werktags</string>
+    <plurals name="recur_every_n_days">
+        <item quantity="one">jeden Tag</item>
+        <item quantity="other">alle %d Tage</item>
+    </plurals>
+    <plurals name="recur_every_n_weeks">
+        <item quantity="one">jede Woche</item>
+        <item quantity="other">alle %d Wochen</item>
+    </plurals>
+    <plurals name="recur_every_n_months">
+        <item quantity="one">jeden Monat</item>
+        <item quantity="other">alle %d Monate</item>
+    </plurals>
+    <plurals name="recur_every_n_years">
+        <item quantity="one">jedes Jahr</item>
+        <item quantity="other">alle %d Jahre</item>
+    </plurals>
+    <plurals name="recur_every_n_weeks_on">
+        <item quantity="one">%2$s</item>
+        <item quantity="other">alle %1$d Wochen %2$s</item>
+    </plurals>
+    <string name="recur_when_done">%1$s ab Erledigung</string>
+
+    <string name="tasks_overdue">Überfällig</string>
+    <string name="tasks_today">Heute</string>
+    <string name="tasks_soon">Nächste 7 Tage</string>
+    <string name="tasks_later">Später</string>
+    <string name="tasks_no_date">Ohne Datum</string>
+
+    <string name="theme_system">Wie Gerät</string>
+    <string name="theme_light">Hell</string>
+    <string name="theme_dark">Dunkel</string>
+
+    <string name="channel_reminders">Erinnerungen</string>
+    <string name="reminder_due">Aufgabe fällig</string>
+    <string name="reminder_done">Erledigt</string>
+    <string name="channel_sync">Synchronisierung</string>
+    <string name="conflict_title_one">Konflikt: %1$s</string>
+    <plurals name="conflict_title_many">
+        <item quantity="one">%d Konflikt beim Synchronisieren</item>
+        <item quantity="other">%d Konflikte beim Synchronisieren</item>
+    </plurals>
+    <string name="conflict_text">Die Handy-Version liegt als Kopie daneben. Tippen zum Prüfen.</string>
+    <string name="conflict_big">Diese Notizen wurden gleichzeitig woanders geändert: %1$s. Die Version vom Server ist in der Notiz, die vom Handy liegt als Kopie daneben.</string>
+
+    <string name="status_synced">Synchronisiert %1$s</string>
+    <string name="status_conflict"> · ⚠ Konflikt</string>
+    <string name="status_error">⚠ %1$s (%2$s)</string>
+    <string name="status_cloning">Klone …</string>
+    <string name="err_token">GitHub-Token falsch, abgelaufen oder ohne Schreibrechte</string>
+    <string name="err_offline">Kein Netz – wird später gepusht</string>
+    <string name="err_repo_not_found">Repo nicht gefunden: URL prüfen</string>
+    <string name="err_folder_not_empty">Ordner %1$s ist nicht leer</string>
+    <string name="err_copy_failed">Kopieren fehlgeschlagen</string>
+    <string name="err_rename_failed">Umbenennen fehlgeschlagen</string>
+
+    <string name="commit_phone_changes">Handy: Änderungen</string>
+    <string name="commit_merge_server">Merge vom Server</string>
+    <string name="commit_merge_conflict">Merge mit Konflikt: %1$s</string>
+    <string name="commit_note">Notiz: %1$s</string>
+    <string name="commit_clip">Clip: %1$s</string>
+    <string name="commit_deleted">Gelöscht: %1$s</string>
+    <string name="commit_moved">Verschoben: %1$s -> %2$s</string>
+    <string name="commit_folder_moved">Ordner verschoben: %1$s -> %2$s</string>
+    <string name="commit_conflict_resolved_phone">Konflikt gelöst: %1$s (Handy-Version)</string>
+    <string name="commit_conflict_resolved_server">Konflikt gelöst: %1$s (Server-Version)</string>
+    <string name="commit_done">Erledigt: %1$s</string>
+    <string name="commit_reopened">Wieder offen: %1$s</string>
+    <string name="commit_task">Aufgabe: %1$s</string>
+
+    <string name="vault_moving">Verschiebe Vault …</string>
+    <plurals name="vault_moved_leftover">
+        <item quantity="one">⚠ Vault verschoben, aber %d Datei am alten Ort konnte nicht gelöscht werden</item>
+        <item quantity="other">⚠ Vault verschoben, aber %d Dateien am alten Ort konnten nicht gelöscht werden</item>
+    </plurals>
+    <string name="vault_now_private">Vault liegt jetzt privat in der App</string>
+    <string name="vault_now_shared">Vault liegt jetzt in Documents/</string>
+    <string name="vault_move_failed">⚠ Verschieben fehlgeschlagen: %1$s</string>
+    <string name="vault_leftover_deleted">Alter öffentlicher Ordner gelöscht</string>
+    <plurals name="vault_leftover_not_deleted">
+        <item quantity="one">⚠ %1$d Datei in %2$s ließ sich nicht löschen</item>
+        <item quantity="other">⚠ %1$d Dateien in %2$s ließen sich nicht löschen</item>
+    </plurals>
+    <string name="share_pending_hint">Geteilter Inhalt wird nach dem Entsperren gespeichert</string>
+    <string name="editor_changed_meanwhile">⚠ Notiz wurde inzwischen geändert – deine Version ist eine Konfliktkopie</string>
+    <string name="clip_loading">Lade %1$s …</string>
+    <string name="clip_source">Quelle</string>
+    <string name="clip_failed">Seite konnte nicht geladen werden</string>
+    <string name="md_table_column">Spalte</string>
+
+    <string name="settings_language_title">%1$d. Sprache</string>
+    <string name="settings_language_device">Wie Gerät</string>
+    <string name="settings_language_device_only">Die App folgt der Gerätesprache (eine eigene Sprache pro App gibt es ab Android 13).</string>
+</resources>

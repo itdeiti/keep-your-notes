@@ -7,6 +7,6 @@
     android:targetCellWidth="3"
     android:targetCellHeight="3"
     android:updatePeriodMillis="0"
-    android:configure="app.notizen.WidgetConfigActivity"
+    android:configure="app.kyn.WidgetConfigActivity"
     android:widgetFeatures="reconfigurable"
     android:widgetCategory="home_screen" />

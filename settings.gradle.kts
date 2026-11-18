@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "notizen-app"
+rootProject.name = "keep-your-notes"
 include(":app")

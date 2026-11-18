@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -14,19 +15,19 @@ val gitCommits: Int = providers.exec {
 }.standardOutput.asText.map { it.trim().toIntOrNull() ?: 1 }.getOrElse(1)
 
 android {
-    namespace = "app.notizen"
+    namespace = "app.kyn"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "app.notizen"
+        applicationId = "app.kyn"
         minSdk = 31
         targetSdk = 36
         versionCode = gitCommits
         versionName = "0.$gitCommits"
     }
 
-    // Debug key lives in the repo so every Mac signs with the same key and the
-    // phone accepts updates (a new key would force uninstall = lose token/settings).
+    // Debug key lives in the repo (public, password "android"): only for the separate debug app
+    // "app.kyn.debug". The real app is signed with a private release key, see releaseSigning().
     signingConfigs {
         getByName("debug") {
             storeFile = file("debug.keystore")
@@ -34,9 +35,35 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        releaseSigning()?.let { r ->
+            create("release") {
+                storeFile = file(r.getProperty("storeFile"))
+                storePassword = r.getProperty("password")
+                keyAlias = r.getProperty("keyAlias", "kyn")
+                keyPassword = r.getProperty("password")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            // installs next to the real app, so development never touches its data
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+            manifestPlaceholders["appLabel"] = "KYN Debug"
+        }
+        getByName("release") {
+            isMinifyEnabled = false // JGit and Readability4J rely on reflection
+            signingConfig = signingConfigs.findByName("release")
+            manifestPlaceholders["appLabel"] = "KYN"
+        }
     }
 
     buildFeatures { compose = true }
+
+    // Languages = values-<lang>/ folders; the list for Android's per-app language setting
+    // (and the in-app picker) is generated from them. Default (values/) is English.
+    androidResources { generateLocaleConfig = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -74,4 +101,30 @@ dependencies {
     implementation("net.dankito.readability4j:readability4j:1.0.8")
     implementation("org.jsoup:jsoup:1.18.1") // newer than the 1.11 Readability4J pulls in
     testImplementation("junit:junit:4.13.2")
+}
+
+/**
+ * Private release key, never in the repo. keystore.properties (git-ignored) next to settings.gradle.kts:
+ *
+ *   storeFile=/Users/<you>/.config/kyn/release.p12
+ *   keyAlias=kyn
+ *   keychainService=kyn-release-key   # macOS: password from the login keychain
+ *   # password=...                        # elsewhere: password in this file instead
+ *
+ * tools/make-release-key.sh creates key, keychain entry and file. Null when missing: then release
+ * builds are unsigned and tools/release.sh refuses to publish.
+ */
+fun releaseSigning(): Properties? {
+    val f = rootProject.file("keystore.properties")
+    if (!f.exists()) return null
+    val p = Properties().apply { f.inputStream().use { load(it) } }
+    val service = p.getProperty("keychainService")
+    if (p.getProperty("password") == null && service != null) {
+        val pw = providers.exec {
+            commandLine("security", "find-generic-password", "-s", service, "-w")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.get().trim()
+        if (pw.isNotEmpty()) p.setProperty("password", pw)
+    }
+    return p.takeIf { it.getProperty("storeFile") != null && it.getProperty("password") != null }
 }

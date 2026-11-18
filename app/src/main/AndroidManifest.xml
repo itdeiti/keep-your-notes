@@ -21,7 +21,7 @@
         android:name=".App"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="Notizen"
+        android:label="${appLabel}"
         android:theme="@style/AppTheme">
 
         <activity
@@ -38,7 +38,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-            <intent-filter android:label="Als Notiz">
+            <intent-filter android:label="@string/label_process_text">
                 <action android:name="android.intent.action.PROCESS_TEXT" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
@@ -48,7 +48,7 @@
         <receiver
             android:name=".QuickWidget"
             android:exported="true"
-            android:label="Schnellnotiz">
+            android:label="@string/widget_quick_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -68,7 +68,7 @@
         <receiver
             android:name=".NotesWidget"
             android:exported="true"
-            android:label="Notizliste">
+            android:label="@string/widget_list_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -81,8 +81,8 @@
             android:name=".WidgetConfigActivity"
             android:excludeFromRecents="true"
             android:exported="true"
-            android:label="Notizliste einrichten"
-            android:taskAffinity="app.notizen.widgetconfig"
+            android:label="@string/widget_config_label"
+            android:taskAffinity="${applicationId}.widgetconfig"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
@@ -92,7 +92,7 @@
         <receiver
             android:name=".TaskWidget"
             android:exported="true"
-            android:label="Aufgabe">
+            android:label="@string/widget_task_label">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
@@ -105,7 +105,7 @@
             android:name=".QuickTaskActivity"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:taskAffinity="app.notizen.quicktask"
+            android:taskAffinity="${applicationId}.quicktask"
             android:theme="@style/QuickTask"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 

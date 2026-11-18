@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Import an existing Obsidian vault (e.g. a Zettelkasten with Google Keep exports)
-into notes-vault, step by step. Privacy rule: this script never prints note
+into the notes vault, step by step. Privacy rule: this script never prints note
 content, titles or file names, only counts. Details go to files under _import/
 that only the user opens.
 
@@ -579,7 +579,7 @@ def git(vault, *args, check=True):
 
 
 def notify(msg):
-    subprocess.run(["osascript", "-e", 'display notification "%s" with title "Notizen"' % msg.replace('"', "'")],
+    subprocess.run(["osascript", "-e", 'display notification "%s" with title "KYN"' % msg.replace('"', "'")],
                    capture_output=True, timeout=10)
 
 

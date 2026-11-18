@@ -1,12 +1,13 @@
 #!/bin/sh
-# Build the APK and publish it as a GitHub release (tag v0.<commits>, asset notizen.apk).
+# Build the signed release APK and publish it as a GitHub release (tag v0.<commits>, asset kyn.apk).
+# Needs the private release key (tools/make-release-key.sh). Notes: all commits since the last tag.
 #
-#   tools/release.sh            # account from GH_USER, default itdeiti
+#   tools/release.sh            # gh account: GH_USER, default the repo owner
 #   GH_USER=other tools/release.sh
 #
 # Install on a phone without building:
-#   gh release download --repo itdeiti/notizen-app --pattern notizen.apk --dir /tmp --clobber
-#   adb install -r /tmp/notizen.apk
+#   gh release download --repo <owner>/keep-your-notes --pattern kyn.apk --dir /tmp --clobber
+#   adb install -r /tmp/kyn.apk
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -24,19 +25,32 @@ fi
 repo=$(git remote get-url origin | sed -E 's#^.*[:/]([^/:]+/[^/]+)$#\1#; s#\.git$##')
 count=$(git rev-list --count HEAD)
 tag="v0.$count"
-user="${GH_USER:-itdeiti}"
+user="${GH_USER:-${repo%%/*}}"
 
 if [ -z "${JAVA_HOME:-}" ] && [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
     export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 fi
-./gradlew -q assembleDebug
+if [ ! -f keystore.properties ]; then
+    echo "No keystore.properties - create the release key first: tools/make-release-key.sh" >&2
+    exit 1
+fi
+./gradlew -q assembleRelease
+apk=app/build/outputs/apk/release/app-release.apk
+if [ ! -f "$apk" ]; then
+    echo "No signed release APK (key file or keychain password missing?)." >&2
+    exit 1
+fi
+
+# release notes: every commit since the previous tag, newest first
+prev=$(git describe --tags --abbrev=0 2>/dev/null || true)
+notes=$(git log --no-merges --pretty='### %s%n%n%b' ${prev:+"$prev"..HEAD})
 
 out=$(mktemp -d)
-cp app/build/outputs/apk/debug/app-debug.apk "$out/notizen.apk"
+cp "$apk" "$out/kyn.apk"
 
 GH_TOKEN=$(gh auth token --user "$user")
 export GH_TOKEN
-gh release create "$tag" "$out/notizen.apk" --repo "$repo" --target "$(git rev-parse HEAD)" \
-    --title "Notizen 0.$count" --notes "$(git log -1 --pretty=%B)"
+gh release create "$tag" "$out/kyn.apk" --repo "$repo" --target "$(git rev-parse HEAD)" \
+    --title "KYN 0.$count" --notes "$notes"
 rm -rf "$out"
 echo "Released $tag: https://github.com/$repo/releases/tag/$tag"

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PIN lock, note list widget setup, quick task dialog, link handling in the note view. -->
+<resources>
+    <!-- PIN screen -->
+    <string name="lock_title">Notes locked</string>
+    <string name="lock_enter_pin">Enter PIN</string>
+    <string name="lock_wrong_pin">Wrong PIN</string>
+    <!-- %1$d = seconds -->
+    <string name="lock_too_many_attempts">Too many attempts – wait %1$d s</string>
+    <string name="lock_ok">OK</string>
+
+    <!-- PIN settings -->
+    <string name="lock_settings_title">4. App lock</string>
+    <string name="lock_settings_on">PIN active. The app locks after it has been in the background.</string>
+    <string name="lock_settings_off">Protects the app with a PIN. The files in the vault folder stay unencrypted.</string>
+    <string name="lock_set_pin">Set PIN</string>
+    <string name="lock_change_pin">Change PIN</string>
+    <string name="lock_remove_pin">Remove PIN</string>
+    <string name="lock_after">Lock after</string>
+    <string name="lock_delay_immediately">Immediately</string>
+    <!-- %1$d = minutes -->
+    <string name="lock_delay_minutes">%1$d min</string>
+
+    <!-- PIN dialog -->
+    <!-- %1$d = min length, %2$d = max length -->
+    <string name="lock_pin_digits_error">PIN: %1$d–%2$d digits</string>
+    <string name="lock_pins_differ">PINs do not match</string>
+    <string name="lock_pin_saved">PIN saved</string>
+    <string name="lock_pin_removed">PIN removed</string>
+    <!-- %1$d = seconds -->
+    <string name="lock_wrong_pin_wait">Wrong PIN – wait %1$d s</string>
+    <string name="lock_current_pin_wrong">Current PIN is wrong</string>
+    <string name="lock_current_pin">Current PIN</string>
+    <!-- %1$d = min length, %2$d = max length -->
+    <string name="lock_new_pin">New PIN (%1$d–%2$d digits)</string>
+    <string name="lock_repeat_pin">Repeat new PIN</string>
+    <string name="lock_cancel">Cancel</string>
+
+    <!-- note list widget setup -->
+    <string name="widgetcfg_title">Set up note list</string>
+    <string name="widgetcfg_cancel">Cancel</string>
+    <!-- %1$d = number of notes the widget will show -->
+    <string name="widgetcfg_selection_count">Selection · %1$d</string>
+    <string name="widgetcfg_all_count">All notes · %1$d</string>
+    <string name="widgetcfg_reset">Reset</string>
+    <string name="widgetcfg_save">Save</string>
+    <string name="widgetcfg_widget_title">Title in widget</string>
+    <string name="widgetcfg_content">Content</string>
+    <string name="widgetcfg_hint">Without a selection below, the widget shows all notes. Folders, tags and notes can be combined.</string>
+    <string name="widgetcfg_no_vault">Vault not set up yet – open the app first.</string>
+    <string name="widgetcfg_folders">Folders (incl. subfolders)</string>
+    <string name="widgetcfg_root_folder">/ (main folder)</string>
+    <string name="widgetcfg_tags">Tags</string>
+    <string name="widgetcfg_single_notes">Single notes</string>
+    <string name="widgetcfg_search">Search …</string>
+
+    <!-- quick task dialog -->
+    <string name="quicktask_saved">Task saved</string>
+    <!-- %1$s = date like "Wed, 11/18" -->
+    <string name="quicktask_saved_on">Task saved · %1$s</string>
+    <!-- %1$s = date, %2$s = time -->
+    <string name="quicktask_saved_at">Task saved · %1$s %2$s</string>
+    <string name="quicktask_save_failed">Saving failed</string>
+    <string name="quicktask_remind_at">Remind at</string>
+    <string name="quicktask_no_time">No time</string>
+    <string name="quicktask_back">Back</string>
+    <string name="quicktask_title">New task</string>
+    <string name="quicktask_placeholder">What needs doing?</string>
+    <string name="quicktask_due">Due / reminder</string>
+    <string name="quicktask_today">Today</string>
+    <string name="quicktask_tomorrow">Tomorrow</string>
+    <string name="quicktask_pick_date">Date …</string>
+    <string name="quicktask_next">Next</string>
+    <string name="quicktask_cancel">Cancel</string>
+    <string name="quicktask_no_date">No date</string>
+
+    <!-- links in the note view -->
+    <string name="mdview_no_app">No app for this link</string>
+    <string name="mdview_link_blocked">Link type blocked for security reasons</string>
+    <!-- %1$s = note name -->
+    <string name="mdview_note_not_found">Note “%1$s” not found</string>
+</resources>

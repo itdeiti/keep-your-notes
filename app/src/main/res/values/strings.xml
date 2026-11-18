@@ -1,5 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Default language: English. Translations live in values-<lang>/ with the same names
+  (values-de/ is German). Strings for single screens are in strings_<area>.xml.
+  Not translated on purpose (vault format, same on every device): conflict copy names
+  "… (Konflikt Handy …).md", Aufgaben.md, Clippings/, Obsidian Tasks syntax (📅 ⏰ 🔁 every week).
+-->
 <resources>
-    <string name="widget_desc">Schnell eine Notiz, Liste oder Diktat anlegen</string>
-    <string name="widget_list_desc">Deine Notizen, Tippen öffnet zum Bearbeiten</string>
-    <string name="widget_task_desc">Aufgabe mit Fälligkeit und Erinnerung anlegen</string>
+    <!-- app components (manifest, launcher widget picker) -->
+    <string name="label_process_text">As note</string>
+    <string name="widget_quick_label">Quick note</string>
+    <string name="widget_list_label">Note list</string>
+    <string name="widget_config_label">Set up note list</string>
+    <string name="widget_task_label">Task</string>
+    <string name="widget_desc">Quickly create a note, checklist or dictation</string>
+    <string name="widget_list_desc">Your notes, tap to edit</string>
+    <string name="widget_task_desc">Create a task with due date and reminder</string>
+
+    <!-- widgets -->
+    <string name="widget_note_hint">Note …</string>
+    <string name="widget_task_hint">Task …</string>
+    <string name="widget_list_title">Notes</string>
+    <string name="widget_list_empty">No notes yet</string>
+    <string name="widget_list_empty_filtered">Nothing in this selection</string>
+    <plurals name="widget_more">
+        <item quantity="one">+%d more</item>
+        <item quantity="other">+%d more</item>
+    </plurals>
+    <string name="widget_content_all">Everything</string>
+    <string name="widget_content_tasks">Tasks only</string>
+    <string name="widget_content_open_tasks">Open tasks only</string>
+    <string name="widget_content_titles">Titles only</string>
+
+    <!-- recurrence (🔁), shown in the task overview and the rule picker -->
+    <string name="recur_daily">daily</string>
+    <string name="recur_weekly">weekly</string>
+    <string name="recur_monthly">monthly</string>
+    <string name="recur_yearly">yearly</string>
+    <string name="recur_weekdays">weekdays</string>
+    <plurals name="recur_every_n_days">
+        <item quantity="one">every day</item>
+        <item quantity="other">every %d days</item>
+    </plurals>
+    <plurals name="recur_every_n_weeks">
+        <item quantity="one">every week</item>
+        <item quantity="other">every %d weeks</item>
+    </plurals>
+    <plurals name="recur_every_n_months">
+        <item quantity="one">every month</item>
+        <item quantity="other">every %d months</item>
+    </plurals>
+    <plurals name="recur_every_n_years">
+        <item quantity="one">every year</item>
+        <item quantity="other">every %d years</item>
+    </plurals>
+    <!-- %1$d = number of weeks, %2$s = weekdays like "Mon, Fri" -->
+    <plurals name="recur_every_n_weeks_on">
+        <item quantity="one">%2$s</item>
+        <item quantity="other">every %1$d weeks on %2$s</item>
+    </plurals>
+    <string name="recur_when_done">%1$s, when done</string>
+
+    <!-- task overview groups -->
+    <string name="tasks_overdue">Overdue</string>
+    <string name="tasks_today">Today</string>
+    <string name="tasks_soon">Next 7 days</string>
+    <string name="tasks_later">Later</string>
+    <string name="tasks_no_date">No date</string>
+
+    <!-- appearance -->
+    <string name="theme_system">Like device</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+
+    <!-- notifications -->
+    <string name="channel_reminders">Reminders</string>
+    <string name="reminder_due">Task due</string>
+    <string name="reminder_done">Done</string>
+    <string name="channel_sync">Sync</string>
+    <string name="conflict_title_one">Conflict: %1$s</string>
+    <plurals name="conflict_title_many">
+        <item quantity="one">%d conflict while syncing</item>
+        <item quantity="other">%d conflicts while syncing</item>
+    </plurals>
+    <string name="conflict_text">The phone version is saved as a copy next to it. Tap to check.</string>
+    <string name="conflict_big">These notes were changed elsewhere at the same time: %1$s. The note has the server version, the phone version is a copy next to it.</string>
+
+    <!-- sync status and errors -->
+    <string name="status_synced">Synced %1$s</string>
+    <string name="status_conflict"> · ⚠ conflict</string>
+    <string name="status_error">⚠ %1$s (%2$s)</string>
+    <string name="status_cloning">Cloning …</string>
+    <string name="err_token">GitHub token wrong, expired or without write access</string>
+    <string name="err_offline">No network – will push later</string>
+    <string name="err_repo_not_found">Repository not found: check the URL</string>
+    <string name="err_folder_not_empty">Folder %1$s is not empty</string>
+    <string name="err_copy_failed">Copying failed</string>
+    <string name="err_rename_failed">Renaming failed</string>
+
+    <!-- git commit messages (vault history) -->
+    <string name="commit_phone_changes">Phone: changes</string>
+    <string name="commit_merge_server">Merge from server</string>
+    <string name="commit_merge_conflict">Merge with conflict: %1$s</string>
+    <string name="commit_note">Note: %1$s</string>
+    <string name="commit_clip">Clip: %1$s</string>
+    <string name="commit_deleted">Deleted: %1$s</string>
+    <string name="commit_moved">Moved: %1$s -> %2$s</string>
+    <string name="commit_folder_moved">Folder moved: %1$s -> %2$s</string>
+    <string name="commit_conflict_resolved_phone">Conflict resolved: %1$s (phone version)</string>
+    <string name="commit_conflict_resolved_server">Conflict resolved: %1$s (server version)</string>
+    <string name="commit_done">Done: %1$s</string>
+    <string name="commit_reopened">Reopened: %1$s</string>
+    <string name="commit_task">Task: %1$s</string>
+
+    <!-- vault and editor messages -->
+    <string name="vault_moving">Moving vault …</string>
+    <plurals name="vault_moved_leftover">
+        <item quantity="one">⚠ Vault moved, but %d file at the old place could not be deleted</item>
+        <item quantity="other">⚠ Vault moved, but %d files at the old place could not be deleted</item>
+    </plurals>
+    <string name="vault_now_private">The vault is now private to the app</string>
+    <string name="vault_now_shared">The vault is now in Documents/</string>
+    <string name="vault_move_failed">⚠ Moving failed: %1$s</string>
+    <string name="vault_leftover_deleted">Old public folder deleted</string>
+    <plurals name="vault_leftover_not_deleted">
+        <item quantity="one">⚠ %1$d file in %2$s could not be deleted</item>
+        <item quantity="other">⚠ %1$d files in %2$s could not be deleted</item>
+    </plurals>
+    <string name="share_pending_hint">Shared content will be saved after unlocking</string>
+    <string name="editor_changed_meanwhile">⚠ The note was changed meanwhile – your version is a conflict copy</string>
+    <string name="clip_loading">Loading %1$s …</string>
+    <string name="clip_source">Source</string>
+    <string name="clip_failed">Page could not be loaded</string>
+    <string name="md_table_column">Column</string>
+
+    <!-- language (settings) -->
+    <string name="settings_language_title">%1$d. Language</string>
+    <string name="settings_language_device">Like device</string>
+    <string name="settings_language_device_only">The app follows the device language (choosing a language per app needs Android 13).</string>
 </resources>
