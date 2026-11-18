@@ -48,4 +48,25 @@ class WidgetFilterTest {
         assertEquals(listOf("Einkauf.md", "Arbeit/Kunde/Notiz.md"), paths(WidgetFilter(content = WidgetFilter.Content.Tasks)))
         assertEquals(listOf("Einkauf.md"), paths(WidgetFilter(content = WidgetFilter.Content.OpenTasks)))
     }
+
+    private val daily = listOf(
+        note("Daily/2026-11-18.md", "- [ ] Bericht #arbeit\n- [ ] Brot kaufen\n- [x] Mail #arbeit"),
+        note("Projekt.md", "- [ ] Angebot\n- [ ] Review", tags = "arbeit"),
+        note("Packliste.md", "- [ ] Zahnbürste"),
+    )
+
+    private fun texts(f: WidgetFilter) = f.tasks(daily).map { it.text }
+
+    @Test fun inlineTagSelectsOnlyItsTaskLine() {
+        assertEquals(listOf("Bericht #arbeit", "Angebot", "Review"), texts(WidgetFilter(tags = setOf("arbeit"))))
+    }
+
+    @Test fun inlineTagHidesOnlyItsTaskLine() {
+        assertEquals(listOf("Brot kaufen", "Zahnbürste"), texts(WidgetFilter(tags = setOf("arbeit"), exclude = true)))
+    }
+
+    @Test fun noteSelectionKeepsAllItsTasks() {
+        assertEquals(listOf("Zahnbürste"), texts(WidgetFilter(notes = setOf("Packliste.md"))))
+        assertEquals(5, texts(WidgetFilter()).size)
+    }
 }

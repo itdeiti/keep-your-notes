@@ -76,7 +76,7 @@ Tasks use the Obsidian Tasks/Reminder format:
 - **Quick note** – new note, checklist or dictation in one tap.
 - **Task** – quick task with date and reminder (see above). Resizable down to one cell (then only ＋⏰).
 - **Note list** – Keep-style cards; tap a checkbox to tick it without opening the app, tap text to edit. Each widget has its own settings (on placing it, or long-press → widget settings): title, content (all / tasks / open tasks / titles) and any mix of folders, tags and single notes, combined with OR, either shown alone or hidden ("Hide these").
-- **Task list** – every open task grouped like the task overview (overdue, today, next 7 days, later, no date) with due date, time, 🔁 rule and the note it is in; tick the checkbox to complete a task, tap the text to open its note, ＋ adds a task like the "Task" widget. Optional settings (long-press → widget settings): title and any mix of folders, tags and single notes to show alone or to hide (e.g. packing lists).
+- **Task list** – every open task grouped like the task overview (overdue, today, next 7 days, later, no date) with due date, time, 🔁 rule and the note it is in; tick the checkbox to complete a task, tap the text to open its note, ＋ adds a task like the "Task" widget. Optional settings (long-press → widget settings): title, order (overdue first, or next due first and overdue after) and any mix of folders, tags and single notes to show alone or to hide (e.g. packing lists); a tag inside a task line selects only that task.
 
 </details>
 

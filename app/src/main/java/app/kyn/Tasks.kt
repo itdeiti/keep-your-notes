@@ -65,8 +65,8 @@ object Tasks {
         else -> Group.Later
     }
 
-    /** Non-empty groups in display order, each sorted by date, time, note, text. */
-    fun grouped(items: List<Item>, today: LocalDate): List<Pair<Group, List<Item>>> {
+    /** Non-empty groups in [order], each sorted by date, time, note, text. */
+    fun grouped(items: List<Item>, today: LocalDate, order: List<Group> = Group.entries): List<Pair<Group, List<Item>>> {
         val sorted = items.sortedWith(
             compareBy<Item, LocalDate?>(nullsLast()) { it.date }
                 .thenBy(nullsLast()) { it.time?.padStart(5, '0') }
@@ -74,7 +74,7 @@ object Tasks {
                 .thenBy { it.text.lowercase() },
         )
         val by = sorted.groupBy { groupOf(it.date, today) }
-        return Group.entries.mapNotNull { g -> by[g]?.let { g to it } }
+        return order.mapNotNull { g -> by[g]?.let { g to it } }
     }
 
     /** The line itself after ticking or unticking it (same rule as in the editor, without a new 🔁 occurrence). */

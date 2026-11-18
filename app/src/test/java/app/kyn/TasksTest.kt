@@ -65,4 +65,17 @@ class TasksTest {
         assertTrue(done.startsWith("- [x] Milch 📅 2026-11-20 ✅ "))
         assertEquals(l, Tasks.toggled(done))
     }
+
+    @Test fun customGroupOrderPutsUpcomingBeforeOverdue() {
+        val items = listOf(
+            Tasks.parse("a.md", "- [ ] alt 📅 2026-11-10")!!,
+            Tasks.parse("a.md", "- [ ] heute 📅 2026-11-17")!!,
+            Tasks.parse("a.md", "- [ ] bald 📅 2026-11-20")!!,
+        )
+        val order = WidgetFilter.Order.UpcomingFirst.groups
+        assertEquals(
+            listOf(Tasks.Group.Today, Tasks.Group.Soon, Tasks.Group.Overdue),
+            Tasks.grouped(items, today, order).map { it.first },
+        )
+    }
 }

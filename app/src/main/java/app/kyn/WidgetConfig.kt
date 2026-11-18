@@ -65,7 +65,17 @@ data class WidgetFilter(
     val notes: Set<String> = emptySet(),
     val content: Content = Content.All,
     val exclude: Boolean = false,
+    /** Task list widget only: which date group comes first. */
+    val order: Order = Order.OverdueFirst,
 ) {
+    enum class Order(@StringRes val label: Int, val groups: List<Tasks.Group>) {
+        OverdueFirst(R.string.widgetcfg_order_overdue_first, Tasks.Group.entries),
+        UpcomingFirst(
+            R.string.widgetcfg_order_upcoming_first,
+            listOf(Tasks.Group.Today, Tasks.Group.Soon, Tasks.Group.Later, Tasks.Group.Overdue, Tasks.Group.NoDate),
+        ),
+    }
+
     enum class Content(@StringRes val label: Int) {
         All(R.string.widget_content_all), Tasks(R.string.widget_content_tasks),
         OpenTasks(R.string.widget_content_open_tasks), Titles(R.string.widget_content_titles),
@@ -75,10 +85,26 @@ data class WidgetFilter(
 
     fun matches(n: Note): Boolean = !restricted || selected(n) != exclude
 
-    private fun selected(n: Note): Boolean =
+    private fun selected(n: Note): Boolean = selectedByNote(n) || n.tags.any { it in tags }
+
+    /** Picked by name, folder or a frontmatter tag: holds for every line of the note. */
+    private fun selectedByNote(n: Note): Boolean =
         n.path in notes ||
             folders.any { f -> if (f.isEmpty()) n.folder.isEmpty() else n.folder == f || n.folder.startsWith("$f/") } ||
-            n.tags.any { it in tags }
+            frontTags(n.front).any { it in tags }
+
+    /**
+     * Open tasks for the task list widget. An inline #tag only selects the task line that carries it,
+     * not every task of the note it appears in (a daily note with one #work task is not all work).
+     */
+    fun tasks(all: List<Note>): List<Tasks.Item> {
+        if (!restricted) return Tasks.open(all)
+        return all.flatMap { n ->
+            val whole = selectedByNote(n)
+            if (!whole && !exclude && n.tags.none { it in tags }) return@flatMap emptyList() // skip parsing
+            Tasks.open(listOf(n)).filter { t -> (whole || Markdown.tags(t.line).any { it in tags }) != exclude }
+        }
+    }
 
     /** Only-tasks modes drop notes that have nothing to show. */
     fun keep(n: Note): Boolean = when (content) {
@@ -104,6 +130,7 @@ data class WidgetFilter(
                 notes = p.getStringSet("notes_$id", emptySet())!!.toSet(),
                 content = runCatching { Content.valueOf(p.getString("content_$id", "All")!!) }.getOrDefault(Content.All),
                 exclude = p.getBoolean("exclude_$id", false),
+                order = runCatching { Order.valueOf(p.getString("order_$id", "")!!) }.getOrDefault(Order.OverdueFirst),
             )
         }
 
@@ -124,12 +151,13 @@ data class WidgetFilter(
                 .putStringSet("notes_$id", f.notes)
                 .putString("content_$id", f.content.name)
                 .putBoolean("exclude_$id", f.exclude)
+                .putString("order_$id", f.order.name)
                 .commit() // the widget update right after reads it
         }
 
         fun delete(ctx: Context, ids: IntArray) {
             val e = sp(ctx).edit()
-            for (id in ids) for (k in listOf("title", "folders", "tags", "notes", "content", "exclude")) e.remove("${k}_$id")
+            for (id in ids) for (k in listOf("title", "folders", "tags", "notes", "content", "exclude", "order")) e.remove("${k}_$id")
             e.apply()
         }
     }
@@ -203,7 +231,7 @@ private fun WidgetConfigScreen(
             .sortedWith(compareByDescending<Note> { it.path in f.notes }.thenBy { it.title.lowercase() })
     }
     // task list: count open tasks, the content modes do not apply
-    val count = remember(f, notes) { if (tasks) Tasks.open(f.apply(notes)).size else f.apply(notes).size }
+    val count = remember(f, notes) { if (tasks) f.tasks(notes).size else f.apply(notes).size }
 
     Scaffold(
         topBar = {
@@ -242,6 +270,14 @@ private fun WidgetConfigScreen(
                     f.title, { f = f.copy(title = it) }, Modifier.fillMaxWidth(), singleLine = true,
                     label = { Text(stringResource(R.string.widgetcfg_widget_title)) }, placeholder = { Text(stringResource(if (tasks) R.string.widget_tasks_title else R.string.widget_list_title)) },
                 )
+                if (tasks) {
+                    Section(stringResource(R.string.widgetcfg_order))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (o in WidgetFilter.Order.entries) FilterChip(
+                            selected = f.order == o, onClick = { f = f.copy(order = o) }, label = { Text(stringResource(o.label)) },
+                        )
+                    }
+                }
                 if (!tasks) {
                     Section(stringResource(R.string.widgetcfg_content))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
