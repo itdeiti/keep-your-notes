@@ -61,15 +61,14 @@ class TasksWidget : AppWidgetProvider() {
         private fun views(ctx: Context, f: WidgetFilter, tasks: List<Tasks.Item>, locked: Boolean): RemoteViews {
             val today = LocalDate.now()
             val px = ctx.resources.displayMetrics.density
-            val fg = ctx.getColor(R.color.widget_item_fg)
-            val dim = (fg and 0x00FFFFFF) or (0x99 shl 24)
-            val red = ctx.getColor(R.color.widget_overdue)
+            // colors as resources, not resolved ints: the launcher picks the day or night variant itself,
+            // so the text follows dark mode and battery saver without waiting for the next update
             val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(2)
             for ((g, list) in Tasks.grouped(tasks, today, f.order.groups)) {
                 val size = list.size + 1 // header + tasks form one card
                 val head = RemoteViews(ctx.packageName, R.layout.widget_item_title).apply {
                     setTextViewText(R.id.wc_text, ctx.getString(g.label) + "  " + list.size)
-                    setTextColor(R.id.wc_text, if (g == Tasks.Group.Overdue) red else fg)
+                    setColorStateList(R.id.wc_text, "setTextColor", if (g == Tasks.Group.Overdue) R.color.widget_overdue else R.color.widget_item_fg)
                     setInt(R.id.wc_root, "setBackgroundResource", NotesWidget.bg(0, size))
                 }
                 items.addItem(("group:" + g.name).hashCode().toLong(), head)
@@ -78,7 +77,7 @@ class TasksWidget : AppWidgetProvider() {
                         // own line for the date: a long task text can no longer push it out of the row
                         setTextViewText(R.id.wc_text, t.text)
                         setTextViewText(R.id.wc_meta, meta(ctx, t))
-                        setTextColor(R.id.wc_meta, if (g == Tasks.Group.Overdue) red else dim)
+                        setColorStateList(R.id.wc_meta, "setTextColor", if (g == Tasks.Group.Overdue) R.color.widget_overdue else R.color.widget_item_meta)
                         setCompoundButtonChecked(R.id.wc_check, false)
                         setOnCheckedChangeResponse(
                             R.id.wc_check,
