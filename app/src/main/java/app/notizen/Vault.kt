@@ -120,7 +120,12 @@ fun cleanTag(raw: String) = raw.trim().removePrefix("#").lowercase()
     .replace(Regex("\\s+"), "-").replace(Regex("[^\\p{L}\\d_/-]"), "").trim('-')
 
 object Vault {
-    private val skip = setOf(".git", ".obsidian", ".trash")
+    /** Obsidian template folder in the vault root: templates are not notes (placeholders, no content). */
+    const val TEMPLATES = "templates"
+
+    /** Folders the app never shows: dot folders (.git, .obsidian, .trash …) and the root [TEMPLATES] folder. */
+    internal fun hidden(root: File, dir: File): Boolean =
+        dir.name.startsWith(".") || (dir.parentFile == root && dir.name.equals(TEMPLATES, ignoreCase = true))
     private val stamp = DateTimeFormatter.ofPattern("yyyy-MM-dd HHmm")
 
     fun dir(ctx: Context): File = Prefs.load(ctx).let { dirFor(ctx, it.storage, it.folder) }
@@ -182,7 +187,7 @@ object Vault {
         val root = dir(ctx)
         if (!root.isDirectory) return emptyList()
         return root.walkTopDown()
-            .onEnter { it == root || (it.name !in skip && !it.name.startsWith(".")) }
+            .onEnter { it == root || !hidden(root, it) }
             .filter { it.isFile && it.extension == "md" }
             .mapNotNull { runCatching { read(root, it) }.getOrNull() }
             .toList()
@@ -193,7 +198,7 @@ object Vault {
     /** All folders below the vault root (no dot folders), PARA folders first, subfolders after their parent. */
     fun folders(root: File): List<String> {
         if (!root.isDirectory) return emptyList()
-        val all = root.walkTopDown().onEnter { it == root || !it.name.startsWith(".") }
+        val all = root.walkTopDown().onEnter { it == root || !hidden(root, it) }
             .filter { it.isDirectory && it != root }.map { it.relativeTo(root).path }.toList()
         return sortFolders(all + PARA.filter { it !in all })
     }
