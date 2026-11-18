@@ -21,7 +21,10 @@ import org.eclipse.jgit.transport.RefSpec
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.URIish
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
+import org.eclipse.jgit.treewalk.EmptyTreeIterator
+import org.eclipse.jgit.treewalk.FileTreeIterator
 import org.eclipse.jgit.treewalk.TreeWalk
+import org.eclipse.jgit.treewalk.filter.TreeFilter
 import java.io.File
 import java.time.LocalDateTime
 
@@ -149,8 +152,12 @@ object GitSync {
     suspend fun cloneOrOpen(ctx: Context) = locked {
         val dir = Vault.dir(ctx)
         if (isRepo(dir)) return@locked
-        cloneInto(dir) { target ->
-          Git.cloneRepository()
+        cloneInto(dir) { target -> cloneRepo(ctx, target) }
+        writeGitignore(dir)
+    }
+
+    private fun cloneRepo(ctx: Context, target: File) {
+        Git.cloneRepository()
             .setURI(Prefs.load(ctx).repoUrl)
             .setDirectory(target)
             .setCredentialsProvider(creds(ctx))
@@ -165,10 +172,61 @@ object GitSync {
                 // Empty GitHub repo: start on "main" instead of JGit's default "master".
                 if (repo.resolve(Constants.HEAD) == null) repo.updateRef(Constants.HEAD).link("refs/heads/main")
             }
-        }
+    }
+
+    private fun writeGitignore(dir: File) {
         val ignore = File(dir, ".gitignore")
         if (!ignore.exists()) ignore.writeText(".obsidian/workspace*.json\n.trash/\n")
-        Unit
+    }
+
+    /**
+     * Before [reclone]: fetch, then list the local files that differ from the server (new, changed,
+     * deleted; ignored files left out). Those would be lost. Compares content, not history, so after
+     * the server history was rewritten an otherwise synced phone reports nothing.
+     */
+    suspend fun localChanges(ctx: Context): List<String> = locked {
+        open(ctx).use { git ->
+            git.fetch().setRemote("origin").setCredentialsProvider(creds(ctx)).call()
+            val repo = git.repository
+            differsFrom(repo, repo.resolve("refs/remotes/origin/${repo.branch}"))
+        }
+    }
+
+    /** Work-tree files of [repo] that differ from [commit] (null = empty server, every file counts). */
+    internal fun differsFrom(repo: Repository, commit: ObjectId?): List<String> {
+        val out = mutableListOf<String>()
+        TreeWalk(repo).use { tw ->
+            tw.isRecursive = true
+            if (commit != null) RevWalk(repo).use { rw -> tw.addTree(rw.parseCommit(commit).tree) } else tw.addTree(EmptyTreeIterator())
+            val wt = tw.addTree(FileTreeIterator(repo))
+            tw.filter = TreeFilter.ANY_DIFF
+            while (tw.next()) {
+                if (tw.getTree(wt, FileTreeIterator::class.java)?.isEntryIgnored == true) continue
+                out += tw.pathString
+            }
+        }
+        return out
+    }
+
+    /**
+     * Throw the local vault (with its git history) away and clone it fresh, e.g. after the server history
+     * was rewritten. The clone goes into a sibling folder first and only then replaces the vault, so a
+     * failed clone (offline, wrong token) leaves everything as it was. Local changes are lost: check
+     * [localChanges] first.
+     */
+    suspend fun reclone(ctx: Context) = locked {
+        recloneInto(Vault.dir(ctx)) { target -> cloneRepo(ctx, target) }
+        writeGitignore(Vault.dir(ctx))
+    }
+
+    internal fun recloneInto(dir: File, clone: (File) -> Unit) {
+        val fresh = File(dir.parentFile, dir.name + ".clone").apply { deleteRecursively() }
+        clone(fresh)
+        if (!dir.exists()) { if (!fresh.renameTo(dir)) error("Renaming ${fresh.path} failed"); return }
+        val old = File(dir.parentFile, dir.name + ".old").apply { deleteRecursively() }
+        if (!dir.renameTo(old)) { fresh.deleteRecursively(); error("Renaming ${dir.path} failed") }
+        if (!fresh.renameTo(dir)) { old.renameTo(dir); error("Renaming ${fresh.path} failed") }
+        old.deleteRecursively()
     }
 
     suspend fun commit(ctx: Context, message: String) = locked {
@@ -225,6 +283,9 @@ object GitSync {
             repo.updateRef("refs/heads/$branch").apply { setNewObjectId(remote); update() }
             git.reset().setMode(ResetType.HARD).call()
         } else if (remote != null) {
+            // Server history replaced (new repo, history rewritten): merging would upload the old history
+            // again, including whatever was removed from it. Only a fresh clone fixes this.
+            if (!related(repo, head!!, remote)) throw UnrelatedHistory()
             val r = git.merge().include(remote).setMessage(msgs.merge).call()
             when (r.mergeStatus) {
                 MergeStatus.CONFLICTING -> copies = resolveConflicts(git, id, r.conflicts.keys, remote, msgs)
@@ -236,6 +297,16 @@ object GitSync {
         }
         if (repo.resolve(Constants.HEAD) != null) push(git, creds, branch)
         return copies
+    }
+
+    /** The server's history no longer shares any commit with the phone's: the vault must be cloned fresh. */
+    class UnrelatedHistory : IllegalStateException("Server history does not match the phone")
+
+    internal fun related(repo: Repository, a: ObjectId, b: ObjectId): Boolean = RevWalk(repo).use { rw ->
+        rw.revFilter = org.eclipse.jgit.revwalk.filter.RevFilter.MERGE_BASE
+        rw.markStart(rw.parseCommit(a))
+        rw.markStart(rw.parseCommit(b))
+        rw.next() != null
     }
 
     /** Server version stays in place; the phone's version becomes a conflict copy next to it. */
@@ -291,6 +362,7 @@ object GitSync {
         val raw = (chain.last().message ?: chain.last().javaClass.simpleName).take(160)
         return when {
             // local: the vault folder exists but is not a readable Git repository (missing file access?)
+            chain.any { it is UnrelatedHistory } -> ctx.getString(R.string.err_unrelated_history)
             chain.any { it is org.eclipse.jgit.errors.RepositoryNotFoundException } ->
                 ctx.getString(R.string.err_vault_unreadable, raw)
             Regex("not authorized|Authentication is required|401|403", RegexOption.IGNORE_CASE)

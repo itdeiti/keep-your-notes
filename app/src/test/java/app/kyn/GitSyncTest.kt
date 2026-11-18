@@ -127,4 +127,65 @@ class GitSyncTest {
         assertFalse(File(tmp.root, "vault.clone").exists())
         assertFalse(File(tmp.root, "vault.old").exists())
     }
+
+    // ---------- rewritten / replaced server history ----------
+
+    /** What the Mac does for a fresh history: one orphan commit with the current files, force-pushed. */
+    private fun rewriteServerHistory() {
+        mac.checkout().setOrphan(true).setName("fresh").call()
+        mac.add().addFilepattern(".").call()
+        mac.commit().setMessage("chore: start fresh history").setAuthor(macId).setCommitter(macId).call()
+        mac.branchDelete().setBranchNames("main").setForce(true).call()
+        mac.branchRename().setOldName("fresh").setNewName("main").call()
+        mac.push().setRemote("origin").setRefSpecs(org.eclipse.jgit.transport.RefSpec("+refs/heads/main:refs/heads/main")).call()
+    }
+
+    private fun serverHead() = Git.open(File(tmp.root, "remote.git")).use { it.repository.resolve("refs/heads/main") }
+
+    @Test fun syncRefusesUnrelatedServerHistory() {
+        write(phone, "inbox/Idee.md", "Hallo")
+        GitSync.syncRepo(phone, null, phoneId) // phone has old history
+        rewriteServerHistory()
+        val before = serverHead()
+        write(phone, "inbox/Neu.md", "x")
+        try { GitSync.syncRepo(phone, null, phoneId); org.junit.Assert.fail() } catch (_: GitSync.UnrelatedHistory) {}
+        assertEquals(before, serverHead()) // nothing of the old history was pushed back
+    }
+
+    @Test fun localChangesCompareContentNotHistory() {
+        GitSync.syncRepo(phone, null, phoneId)
+        phone.fetch().call()
+        val remote = { phone.repository.resolve("refs/remotes/origin/main") }
+        assertEquals(emptyList<String>(), GitSync.differsFrom(phone.repository, remote()))
+        rewriteServerHistory() // same files, new history
+        phone.fetch().call()
+        assertEquals(emptyList<String>(), GitSync.differsFrom(phone.repository, remote()))
+        write(phone, "inbox/Neu.md", "nur Handy")
+        write(phone, "inbox/Einkauf.md", "- [ ] anders\n")
+        assertEquals(listOf("inbox/Einkauf.md", "inbox/Neu.md"), GitSync.differsFrom(phone.repository, remote()).sorted())
+    }
+
+    @Test fun recloneReplacesVaultAndHistory() {
+        val dir = phone.repository.workTree
+        write(phone, "inbox/Alt.md", "alt")
+        GitSync.syncRepo(phone, null, phoneId)
+        File(dir, "inbox/Alt.md").delete()
+        rewriteServerHistory()
+        phone.close()
+        GitSync.recloneInto(dir, ::cloneRemote)
+        Git.open(dir).use { g ->
+            assertEquals(serverHead(), g.repository.resolve("HEAD"))
+            assertEquals(1, g.log().call().count())
+        }
+        assertFalse(File(tmp.root, "phone.clone").exists())
+        assertFalse(File(tmp.root, "phone.old").exists())
+    }
+
+    @Test fun failedRecloneKeepsTheVault() {
+        val dir = phone.repository.workTree
+        write(phone, "inbox/Lokal.md", "bleibt")
+        try { GitSync.recloneInto(dir) { error("offline") }; org.junit.Assert.fail() } catch (_: IllegalStateException) {}
+        assertEquals("bleibt", File(dir, "inbox/Lokal.md").readText())
+        assertTrue(GitSync.isRepo(dir))
+    }
 }

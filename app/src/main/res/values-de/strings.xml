@@ -79,6 +79,7 @@
     <string name="err_token">GitHub-Token falsch, abgelaufen oder ohne Schreibrechte</string>
     <string name="err_offline">Kein Netz – wird später gepusht</string>
     <string name="err_repo_not_found">Repo nicht gefunden: %1$s – URL prüfen und ob der Token Zugriff auf dieses Repo hat (%2$s)</string>
+    <string name="err_unrelated_history">Die Server-Historie passt nicht mehr zum Handy (neues Repo oder neu geschriebene Historie). Es wurde nichts hochgeladen. In den Einstellungen „Vault neu klonen“ nutzen.</string>
     <string name="err_vault_unreadable">Vault-Ordner nicht lesbar – Dateizugriff erlauben oder privaten Speicher wählen (%1$s)</string>
     <string name="err_folder_not_empty">Ordner %1$s ist nicht leer</string>
     <string name="err_copy_failed">Kopieren fehlgeschlagen</string>

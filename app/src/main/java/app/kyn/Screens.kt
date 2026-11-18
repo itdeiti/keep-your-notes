@@ -1020,6 +1020,13 @@ fun SettingsScreen(vm: AppVM) {
             ) { Text(stringResource(if (ready) R.string.settings_save_sync else R.string.settings_save_clone)) }
             if (vm.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (vm.status.isNotBlank()) Text(vm.status, style = MaterialTheme.typography.bodySmall)
+            if (ready) {
+                OutlinedButton(onClick = { vm.checkReclone() }, enabled = !vm.busy && vm.reclone == null, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.reclone_button))
+                }
+                Text(stringResource(R.string.reclone_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+            }
+            RecloneDialog(vm)
             LockSettings()
             Text(stringResource(R.string.settings_appearance_section), style = MaterialTheme.typography.titleMedium)
             var theme by remember { mutableStateOf(ThemeMode.load(ctx)) }
@@ -1096,6 +1103,43 @@ private fun repoUrlProblem(raw: String): Int? = raw.trim().let { url -> when {
         R.string.settings_repo_url_is_app
     else -> null
 } }
+
+/** Confirmation for "clone vault again": what would be lost is listed before anything is deleted. */
+@Composable
+private fun RecloneDialog(vm: AppVM) {
+    val r = vm.reclone ?: return
+    AlertDialog(
+        onDismissRequest = { vm.cancelReclone() },
+        title = { Text(stringResource(R.string.reclone_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                when (r) {
+                    AppVM.Reclone.Checking -> {
+                        Text(stringResource(R.string.reclone_checking))
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                    }
+                    is AppVM.Reclone.Failed -> Text(stringResource(R.string.reclone_failed, r.message), color = MaterialTheme.colorScheme.error)
+                    is AppVM.Reclone.Ready -> if (r.changes.isEmpty()) Text(stringResource(R.string.reclone_clean)) else {
+                        Text(
+                            pluralStringResource(R.plurals.reclone_changes, r.changes.size, r.changes.size),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Text(
+                            r.changes.take(15).joinToString("\n") + if (r.changes.size > 15) "\n…" else "",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (r is AppVM.Reclone.Ready) TextButton({ vm.recloneVault() }) {
+                Text(stringResource(if (r.changes.isEmpty()) R.string.reclone_confirm else R.string.reclone_confirm_lose))
+            }
+        },
+        dismissButton = { TextButton({ vm.cancelReclone() }) { Text(stringResource(R.string.screens_cancel)) } },
+    )
+}
 
 @Composable
 private fun StorageChoice(

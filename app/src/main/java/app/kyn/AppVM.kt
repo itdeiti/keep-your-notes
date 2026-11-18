@@ -235,6 +235,54 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** State of "clone vault again": checking the server, ready (with local files that would be lost), or failed. */
+    sealed interface Reclone {
+        data object Checking : Reclone
+        class Ready(val changes: List<String>) : Reclone
+        class Failed(val message: String) : Reclone
+    }
+
+    var reclone by mutableStateOf<Reclone?>(null)
+        private set
+
+    /** First step: fetch and list what would be lost; the settings show it before anything is deleted. */
+    fun checkReclone() {
+        if (busy || !ready()) return
+        saveEditor()
+        reclone = Reclone.Checking
+        viewModelScope.launch {
+            reclone = try {
+                Reclone.Ready(GitSync.localChanges(ctx))
+            } catch (e: Exception) {
+                Reclone.Failed(GitSync.explain(ctx, e))
+            }
+        }
+    }
+
+    fun cancelReclone() { reclone = null }
+
+    /** Replace the local vault (and its git history) with a fresh clone of the server. */
+    fun recloneVault() {
+        reclone = null
+        if (busy) return
+        viewModelScope.launch {
+            busy = true
+            Status.set(ctx, ctx.getString(R.string.status_cloning))
+            status = Status.get(ctx)
+            try {
+                GitSync.reclone(ctx)
+                withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
+                Status.set(ctx, ctx.getString(R.string.reclone_done))
+            } catch (e: Exception) {
+                Status.set(ctx, "⚠ " + GitSync.explain(ctx, e))
+            } finally {
+                busy = false
+                tick++
+                reload()
+            }
+        }
+    }
+
     /** Remove the old public vault folder that a move to private storage left behind. */
     fun deleteLeftover() {
         val dir = Vault.leftoverShared(ctx) ?: return
