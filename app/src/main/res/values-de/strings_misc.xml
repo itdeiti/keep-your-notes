@@ -39,7 +39,7 @@
     <string name="widgetcfg_save">Speichern</string>
     <string name="widgetcfg_widget_title">Titel im Widget</string>
     <string name="widgetcfg_content">Inhalt</string>
-    <string name="widgetcfg_hint">Ohne Auswahl unten zeigt das Widget alle Notizen. Mehrere Ordner, Tags und Notizen lassen sich kombinieren.</string>
+    <string name="widgetcfg_hint">Ohne Auswahl unten zeigt das Widget alle Notizen. Ordner, Tags und Notizen lassen sich kombinieren, um nur sie anzuzeigen oder um sie auszublenden.</string>
     <string name="widgetcfg_no_vault">Vault noch nicht eingerichtet – erst die App öffnen.</string>
     <string name="widgetcfg_folders">Ordner (inkl. Unterordner)</string>
     <string name="widgetcfg_root_folder">/ (Hauptordner)</string>
@@ -71,5 +71,8 @@
     <string name="mdview_note_not_found">Notiz „%1$s“ nicht gefunden</string>
     <string name="widgetcfg_selection_tasks">Auswahl · %1$d offene Aufgaben</string>
     <string name="widgetcfg_all_tasks">Alle offenen Aufgaben · %1$d</string>
-    <string name="widgetcfg_hint_tasks">Ohne Auswahl unten zeigt das Widget die offenen Aufgaben aller Notizen. Ordner, Tags und Notizen lassen sich kombinieren.</string>
+    <string name="widgetcfg_hint_tasks">Ohne Auswahl unten zeigt das Widget die offenen Aufgaben aller Notizen. Ordner, Tags und Notizen lassen sich kombinieren, um nur sie anzuzeigen oder um sie auszublenden, etwa Packlisten.</string>
+    <string name="widgetcfg_mode">Auswahl</string>
+    <string name="widgetcfg_mode_include">Nur diese anzeigen</string>
+    <string name="widgetcfg_mode_exclude">Diese ausblenden</string>
 </resources>

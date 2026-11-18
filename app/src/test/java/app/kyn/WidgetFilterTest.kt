@@ -34,6 +34,12 @@ class WidgetFilterTest {
         assertEquals(listOf("Einkauf.md", "Arbeitszeit/Log.md", "inbox/Idee.md"), paths(f))
     }
 
+    @Test fun excludeHidesTheSelection() {
+        val f = WidgetFilter(folders = setOf("Arbeit"), notes = setOf("Einkauf.md"), exclude = true)
+        assertEquals(listOf("Arbeitszeit/Log.md", "inbox/Idee.md"), paths(f))
+        assertEquals(notes.size, paths(WidgetFilter(exclude = true)).size)
+    }
+
     @Test fun inlineTagCounts() {
         assertEquals(listOf("inbox/Idee.md"), paths(WidgetFilter(tags = setOf("idee"))))
     }

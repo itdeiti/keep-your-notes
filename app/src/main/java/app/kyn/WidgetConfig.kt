@@ -54,9 +54,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * What one "Notizliste" widget shows. Empty selections = no restriction. Folders, tags and single notes
- * are combined with OR: a note is shown if it lies in a chosen folder (or below), has a chosen tag,
- * or was picked by name.
+ * What one list widget shows. Empty selections = no restriction. Folders, tags and single notes
+ * are combined with OR: a note is selected if it lies in a chosen folder (or below), has a chosen tag,
+ * or was picked by name. [exclude] turns the selection into a block list: everything except it.
  */
 data class WidgetFilter(
     val title: String = "",
@@ -64,6 +64,7 @@ data class WidgetFilter(
     val tags: Set<String> = emptySet(),
     val notes: Set<String> = emptySet(),
     val content: Content = Content.All,
+    val exclude: Boolean = false,
 ) {
     enum class Content(@StringRes val label: Int) {
         All(R.string.widget_content_all), Tasks(R.string.widget_content_tasks),
@@ -72,13 +73,12 @@ data class WidgetFilter(
 
     val restricted get() = folders.isNotEmpty() || tags.isNotEmpty() || notes.isNotEmpty()
 
-    fun matches(n: Note): Boolean {
-        if (!restricted) return true
-        if (n.path in notes) return true
-        if (folders.any { f -> if (f.isEmpty()) n.folder.isEmpty() else n.folder == f || n.folder.startsWith("$f/") }) return true
-        if (tags.isNotEmpty() && n.tags.any { it in tags }) return true
-        return false
-    }
+    fun matches(n: Note): Boolean = !restricted || selected(n) != exclude
+
+    private fun selected(n: Note): Boolean =
+        n.path in notes ||
+            folders.any { f -> if (f.isEmpty()) n.folder.isEmpty() else n.folder == f || n.folder.startsWith("$f/") } ||
+            n.tags.any { it in tags }
 
     /** Only-tasks modes drop notes that have nothing to show. */
     fun keep(n: Note): Boolean = when (content) {
@@ -103,6 +103,7 @@ data class WidgetFilter(
                 tags = p.getStringSet("tags_$id", emptySet())!!.toSet(),
                 notes = p.getStringSet("notes_$id", emptySet())!!.toSet(),
                 content = runCatching { Content.valueOf(p.getString("content_$id", "All")!!) }.getOrDefault(Content.All),
+                exclude = p.getBoolean("exclude_$id", false),
             )
         }
 
@@ -113,12 +114,13 @@ data class WidgetFilter(
                 .putStringSet("tags_$id", f.tags)
                 .putStringSet("notes_$id", f.notes)
                 .putString("content_$id", f.content.name)
+                .putBoolean("exclude_$id", f.exclude)
                 .commit() // the widget update right after reads it
         }
 
         fun delete(ctx: Context, ids: IntArray) {
             val e = sp(ctx).edit()
-            for (id in ids) for (k in listOf("title", "folders", "tags", "notes", "content")) e.remove("${k}_$id")
+            for (id in ids) for (k in listOf("title", "folders", "tags", "notes", "content", "exclude")) e.remove("${k}_$id")
             e.apply()
         }
     }
@@ -244,6 +246,11 @@ private fun WidgetConfigScreen(
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(top = 12.dp),
                 )
+                Section(stringResource(R.string.widgetcfg_mode))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(!f.exclude, { f = f.copy(exclude = false) }, label = { Text(stringResource(R.string.widgetcfg_mode_include)) })
+                    FilterChip(f.exclude, { f = f.copy(exclude = true) }, label = { Text(stringResource(R.string.widgetcfg_mode_exclude)) })
+                }
                 if (notes.isEmpty()) Text(
                     stringResource(R.string.widgetcfg_no_vault),
                     color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp),

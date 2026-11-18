@@ -51,12 +51,13 @@ class TasksWidget : AppWidgetProvider() {
             }
         }
 
-        /** "18.11. 09:00 · 🔁 weekly" – due date (or reminder) and recurrence, empty if neither. */
+        /** "18.11. 09:00 · 🔁 weekly · 📄 Aufgaben" – due date (or reminder), recurrence and the note it is in. */
         private fun meta(ctx: Context, t: Tasks.Item): String = listOfNotNull(
             t.date?.let { d ->
                 Dates.dayMonth(ctx, d) + (t.time?.let { " " + (runCatching { Dates.time(ctx, LocalTime.parse(it.padStart(5, '0'))) }.getOrDefault(it)) } ?: "")
             },
             t.recur?.let { "🔁 " + it.label(ctx.resources) },
+            "📄 " + titleOf(t.path),
         ).joinToString("  ·  ")
 
         private fun views(ctx: Context, f: WidgetFilter, tasks: List<Tasks.Item>): RemoteViews {
@@ -77,7 +78,7 @@ class TasksWidget : AppWidgetProvider() {
                 list.forEachIndexed { i, t ->
                     val text = SpannableStringBuilder(t.text)
                     val m = meta(ctx, t)
-                    if (m.isNotEmpty()) {
+                    run {
                         val start = text.length
                         text.append("\n").append(m)
                         val color = if (g == Tasks.Group.Overdue) red else dim

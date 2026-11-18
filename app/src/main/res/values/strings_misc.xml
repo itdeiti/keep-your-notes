@@ -46,7 +46,7 @@
     <string name="widgetcfg_save">Save</string>
     <string name="widgetcfg_widget_title">Title in widget</string>
     <string name="widgetcfg_content">Content</string>
-    <string name="widgetcfg_hint">Without a selection below, the widget shows all notes. Folders, tags and notes can be combined.</string>
+    <string name="widgetcfg_hint">Without a selection below, the widget shows all notes. Folders, tags and notes can be combined, either to show only them or to hide them.</string>
     <string name="widgetcfg_no_vault">Vault not set up yet – open the app first.</string>
     <string name="widgetcfg_folders">Folders (incl. subfolders)</string>
     <string name="widgetcfg_root_folder">/ (main folder)</string>
@@ -81,5 +81,8 @@
     <string name="mdview_note_not_found">Note “%1$s” not found</string>
     <string name="widgetcfg_selection_tasks">Selection · %1$d open tasks</string>
     <string name="widgetcfg_all_tasks">All open tasks · %1$d</string>
-    <string name="widgetcfg_hint_tasks">Without a selection below, the widget shows the open tasks of all notes. Folders, tags and notes can be combined.</string>
+    <string name="widgetcfg_hint_tasks">Without a selection below, the widget shows the open tasks of all notes. Folders, tags and notes can be combined, either to show only them or to hide them, for example packing lists.</string>
+    <string name="widgetcfg_mode">Selection</string>
+    <string name="widgetcfg_mode_include">Show only these</string>
+    <string name="widgetcfg_mode_exclude">Hide these</string>
 </resources>
