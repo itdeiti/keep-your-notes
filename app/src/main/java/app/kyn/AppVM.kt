@@ -455,6 +455,60 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Hint for an inline section: no 💡 (marker) and no line break (a section is one line). */
+    fun validInlineHint(h: String) = "💡" !in h && h.none { it == '\n' || it == '\r' }
+
+    /**
+     * Turn the open note into an encrypted note like the plugin's "Encrypt note": the whole file content
+     * (frontmatter included) goes into "<name>.mdenc" next to it, the .md is deleted. The editor drops the
+     * plaintext and the encrypted note opens. Earlier versions stay readable in the git history.
+     */
+    suspend fun encryptNote(password: CharArray, hint: String): Boolean {
+        saveEditor()
+        val path = edPath ?: run { password.fill('\u0000'); return false }
+        val text = Vault.serialize(edFront, edBody.text)
+        val root = Vault.dir(ctx)
+        val folder = path.substringBeforeLast('/', "")
+        val base = (if (folder.isEmpty()) "" else "$folder/") + titleOf(path)
+        var target = "$base.mdenc"
+        var n = 2
+        while (File(root, target).exists()) target = "$base ${n++}.mdenc"
+        return try {
+            val b = SecretSession.encryptNew(text, password)
+            withContext(Dispatchers.IO) {
+                Vault.writeEncrypted(root, target, MeldCrypto.fileJson(hint, b))
+                File(root, path).delete()
+            }
+            // drop the plaintext from the editor before anything else can save it
+            edPath = null; edTitle = ""; edFront = emptyList(); edBody = TextFieldValue(""); edSaved = snapshot(); edMtime = 0L
+            afterChangeNow(ctx.getString(R.string.commit_encrypted, titleOf(target)))
+            val f = File(root, target)
+            openSecret(Note(target, emptyList(), "", f.lastModified(), encrypted = true))
+            reload()
+            true
+        } catch (e: Exception) {
+            Toast.makeText(ctx, ctx.getString(R.string.secret_save_failed), Toast.LENGTH_LONG).show()
+            false
+        }
+    }
+
+    /**
+     * Replace the selected text with an encrypted section (v3, like the plugin's "Encrypt selection").
+     * [visible] = shown as 🔐 in Obsidian's reading view (plugin default), else wrapped in %% comments.
+     */
+    suspend fun encryptSelection(password: CharArray, hint: String, visible: Boolean): Boolean {
+        val v = edBody
+        val sel = v.selection
+        val text = v.text.substring(sel.min, sel.max)
+        if (text.isEmpty() || "🔐" in text || !validInlineHint(hint)) { password.fill('\u0000'); return false }
+        val b = SecretSession.encryptNew(text, password)
+        if (edBody.text != v.text) return false // changed meanwhile (sync reload): do not guess where
+        val section = MeldCrypto.inlineText(b, hint, hidden = !visible)
+        edBody = TextFieldValue(v.text.replaceRange(sel.min, sel.max, section), TextRange(sel.min + section.length))
+        saveEditor()
+        return true
+    }
+
     /**
      * Replace encrypted section [i] of the open note with [text], encrypted again with the same password
      * and hint (as v3). Only the new ciphertext goes into the editor text, which is then saved.

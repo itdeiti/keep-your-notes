@@ -89,6 +89,7 @@
     <string name="commit_merge_conflict">Merge mit Konflikt: %1$s</string>
     <string name="commit_note">Notiz: %1$s</string>
     <string name="commit_clip">Clip: %1$s</string>
+    <string name="commit_encrypted">Verschlüsselt: %1$s</string>
     <string name="commit_deleted">Gelöscht: %1$s</string>
     <string name="commit_moved">Verschoben: %1$s -> %2$s</string>
     <string name="commit_folder_moved">Ordner verschoben: %1$s -> %2$s</string>

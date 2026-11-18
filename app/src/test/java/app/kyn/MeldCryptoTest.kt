@@ -235,6 +235,27 @@ class MeldCryptoTest {
         assertEquals("text $canary", MeldCrypto.decrypt(MeldCrypto.parseFile(all[0].readText()).blob!!, pass))
     }
 
+    @Test fun encryptedNoteKeepsFrontmatterLikePlugin() {
+        // "Encrypt note" encrypts the whole file content, frontmatter included
+        val front = listOf("created: 2026-11-18T10:00", "tags: [privat]")
+        val content = Vault.serialize(front, "- [ ] Arzt\nText")
+        Vault.writeEncrypted(tmp.root, "Arzt.mdenc", MeldCrypto.fileJson("", MeldCrypto.encryptV3(content, pass)))
+        val back = MeldCrypto.decrypt(MeldCrypto.parseFile(File(tmp.root, "Arzt.mdenc").readText()).blob!!, pass)!!
+        assertEquals(front to "- [ ] Arzt\nText", Vault.parse(back))
+        // listed without content: the task stays out of task list and reminders
+        assertTrue(Tasks.open(listOf(Vault.read(tmp.root, File(tmp.root, "Arzt.mdenc")))).isEmpty())
+    }
+
+    @Test fun multiLineSelectionBecomesOneLineSection() {
+        val sel = "Zeile 1\n- [ ] geheime Aufgabe\n\nZeile 4"
+        val note = "oben\n" + MeldCrypto.inlineText(MeldCrypto.encryptV3(sel, pass), "", hidden = false) + "\nunten"
+        assertEquals(3, note.lines().size)
+        val i = MeldCrypto.findInline(note.lines()[1]).single()
+        assertEquals(sel, MeldCrypto.decrypt(MeldCrypto.blob(i), pass))
+        // the task inside the section is not visible to the task list
+        assertTrue(Tasks.open(listOf(Note("n.md", emptyList(), note, 0))).isEmpty())
+    }
+
     /** Writes files for the WebCrypto cross-check (tools: decrypt with the plugin's algorithm in Node). */
     @Test fun interopSamples() {
         val dir = File("build/meld-interop").apply { mkdirs() }
