@@ -108,8 +108,8 @@
     <string name="settings_perm_files">Access to all files (for the folder shared with Obsidian)</string>
     <string name="settings_perm_notifications">Notifications (for reminders)</string>
     <string name="settings_perm_allow">Allow</string>
-    <string name="settings_github_section">2. GitHub repo</string>
-    <string name="settings_repo_url">Repo URL</string>
+    <string name="settings_github_section">2. Notes repository</string>
+    <string name="settings_repo_url">Repository with your notes</string>
     <string name="settings_token_saved">Token (saved, leave empty)</string>
     <string name="settings_token">Fine-grained token</string>
     <string name="settings_folder_name">Folder name in Documents/</string>
@@ -132,4 +132,18 @@
     <string name="settings_vault_dir">Vault folder: %1$s</string>
     <!-- %1$s = version name, %2$d = build number -->
     <string name="settings_version">Version %1$s (build %2$d)</string>
+
+    <!-- setup help -->
+    <string name="settings_intro">Set up KYN in three steps: choose where the notes are stored, enter your notes repository, then save and clone.</string>
+    <string name="settings_perm_files_needed">Needed for this storage option: tap \"Allow\" and switch on KYN – or choose \"Only in this app\".</string>
+    <string name="settings_github_intro">KYN keeps your notes in your own private Git repository, e.g. on GitHub. Enter that repository here – not the repository of the KYN app.</string>
+    <string name="settings_repo_url_help">HTTPS address of your notes repository, e.g. https://github.com/you/notes.git</string>
+    <string name="settings_repo_url_https">Use the HTTPS address (https://…); SSH addresses (git@…) do not work in the app.</string>
+    <string name="settings_repo_url_is_app">This is the KYN app itself. Enter the repository with your notes.</string>
+    <string name="settings_token_help">Fine-grained token for this repository only, permission \"Contents: Read and write\".</string>
+    <string name="settings_commit_help">Optional. Shown as the author of commits from this phone.</string>
+    <string name="settings_missing">Still missing: %1$s</string>
+    <string name="settings_missing_files">file access</string>
+    <string name="settings_missing_url">notes repository</string>
+    <string name="settings_missing_token">token</string>
 </resources>

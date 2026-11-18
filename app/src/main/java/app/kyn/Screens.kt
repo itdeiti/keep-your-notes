@@ -45,6 +45,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -900,6 +901,10 @@ fun SettingsScreen(vm: AppVM) {
                 .verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            if (!ready) Text(
+                stringResource(R.string.settings_intro),
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(stringResource(R.string.settings_storage_section), style = MaterialTheme.typography.titleMedium)
             StorageChoice(
                 Storage.Shared, storage, stringResource(R.string.settings_storage_shared_title),
@@ -932,9 +937,15 @@ fun SettingsScreen(vm: AppVM) {
                     )
                 }
             }
-            if (storage == Storage.Shared) Permission(stringResource(R.string.settings_perm_files), files) {
-                ctx.startActivity(
-                    Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}"))
+            if (storage == Storage.Shared) {
+                Permission(stringResource(R.string.settings_perm_files), files) {
+                    ctx.startActivity(
+                        Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}"))
+                    )
+                }
+                if (!files) Text(
+                    stringResource(R.string.settings_perm_files_needed),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
                 )
             }
             Permission(stringResource(R.string.settings_perm_notifications), notif) {
@@ -942,24 +953,49 @@ fun SettingsScreen(vm: AppVM) {
             }
 
             Text(stringResource(R.string.settings_github_section), style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.settings_repo_url)) },
-                placeholder = { Text("https://github.com/name/vault.git") }, singleLine = true)
+            Text(
+                stringResource(R.string.settings_github_intro),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+            )
+            val urlProblem = repoUrlProblem(url)
+            OutlinedTextField(
+                url, { url = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text(stringResource(R.string.settings_repo_url)) },
+                placeholder = { Text("https://github.com/you/notes.git") },
+                isError = urlProblem != null,
+                supportingText = { Text(stringResource(urlProblem ?: R.string.settings_repo_url_help)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            )
             OutlinedTextField(
                 token, { token = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text(stringResource(if (hasToken) R.string.settings_token_saved else R.string.settings_token)) },
+                supportingText = { Text(stringResource(R.string.settings_token_help)) },
                 visualTransformation = PasswordVisualTransformation(),
             )
             if (storage == Storage.Shared) OutlinedTextField(folder, { folder = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text(stringResource(R.string.settings_folder_name)) })
-            OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.settings_commit_name)) })
+            OutlinedTextField(
+                name, { name = it }, Modifier.fillMaxWidth(), singleLine = true,
+                label = { Text(stringResource(R.string.settings_commit_name)) },
+                supportingText = { Text(stringResource(R.string.settings_commit_help)) },
+            )
             OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text(stringResource(R.string.settings_commit_email)) })
 
             Text(stringResource(R.string.settings_reminders_section), style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(time, { time = it }, Modifier.fillMaxWidth(), singleLine = true,
                 label = { Text(stringResource(R.string.settings_default_time)) })
 
+            val missing = buildList {
+                if (storage == Storage.Shared && !files) add(stringResource(R.string.settings_missing_files))
+                if (url.isBlank() || urlProblem != null) add(stringResource(R.string.settings_missing_url))
+                if (token.isBlank() && !hasToken) add(stringResource(R.string.settings_missing_token))
+            }
+            if (missing.isNotEmpty() && !vm.busy) Text(
+                stringResource(R.string.settings_missing, missing.joinToString(", ")),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+            )
             Button(
-                enabled = !vm.busy && (files || storage == Storage.Private) && url.isNotBlank() && (token.isNotBlank() || hasToken),
+                enabled = !vm.busy && missing.isEmpty(),
                 onClick = {
                     vm.setup(Prefs.load(ctx).copy(repoUrl = url, folder = folder, name = name, email = email, defaultTime = time), token)
                     token = ""
@@ -1023,6 +1059,16 @@ fun SettingsScreen(vm: AppVM) {
         }
     }
 }
+
+/** Why [url] cannot be the notes repository, or null if it looks fine (empty counts as fine, see "missing"). */
+@androidx.annotation.StringRes
+private fun repoUrlProblem(raw: String): Int? = raw.trim().let { url -> when {
+    url.isBlank() -> null
+    !url.startsWith("https://") -> R.string.settings_repo_url_https
+    Regex("""github\.com/[^/]+/(keep-your-notes|kyn|notizen-app)(\.git)?/?$""", RegexOption.IGNORE_CASE).containsMatchIn(url) ->
+        R.string.settings_repo_url_is_app
+    else -> null
+} }
 
 @Composable
 private fun StorageChoice(
