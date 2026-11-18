@@ -135,9 +135,10 @@ class WidgetConfigActivity : LockedActivity() {
         super.onCreate(savedInstanceState)
         id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
         setResult(RESULT_CANCELED, Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id))
-        // exported for the launcher: only accept ids of our own list widget
+        // exported for the launcher: only accept ids of our own list widgets
         val provider = AppWidgetManager.getInstance(this).getAppWidgetInfo(id)?.provider
-        if (provider != ComponentName(this, NotesWidget::class.java)) { finish(); return }
+        val tasks = provider == ComponentName(this, TasksWidget::class.java)
+        if (!tasks && provider != ComponentName(this, NotesWidget::class.java)) { finish(); return }
         enableEdgeToEdge()
         if (!AppLock.enabled(this)) AppLock.locked = false
         val start = WidgetFilter.load(this, id)
@@ -156,7 +157,7 @@ class WidgetConfigActivity : LockedActivity() {
                     Surface {
                         val v = vault
                         if (v == null) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                        else WidgetConfigScreen(start, v.first, v.second, onSave = ::save, onCancel = ::finish)
+                        else WidgetConfigScreen(start, v.first, v.second, tasks, onSave = ::save, onCancel = ::finish)
                     }
                 }
             }
@@ -175,7 +176,7 @@ class WidgetConfigActivity : LockedActivity() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun WidgetConfigScreen(
-    start: WidgetFilter, notes: List<Note>, folders: List<String>,
+    start: WidgetFilter, notes: List<Note>, folders: List<String>, tasks: Boolean,
     onSave: (WidgetFilter) -> Unit, onCancel: () -> Unit,
 ) {
     var f by remember { mutableStateOf(start) }
@@ -190,12 +191,13 @@ private fun WidgetConfigScreen(
         notes.filter { search.isBlank() || it.title.contains(search.trim(), ignoreCase = true) || it.path in f.notes }
             .sortedWith(compareByDescending<Note> { it.path in f.notes }.thenBy { it.title.lowercase() })
     }
-    val count = remember(f, notes) { f.apply(notes).size }
+    // task list: count open tasks, the content modes do not apply
+    val count = remember(f, notes) { if (tasks) Tasks.open(f.apply(notes)).size else f.apply(notes).size }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.widgetcfg_title)) },
+                title = { Text(stringResource(if (tasks) R.string.widget_tasks_config_label else R.string.widgetcfg_title)) },
                 navigationIcon = { IconButton(onCancel) { Icon(Icons.Default.Close, stringResource(R.string.widgetcfg_cancel)) } },
             )
         },
@@ -206,7 +208,15 @@ private fun WidgetConfigScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        stringResource(if (f.restricted) R.string.widgetcfg_selection_count else R.string.widgetcfg_all_count, count),
+                        stringResource(
+                            when {
+                                tasks && f.restricted -> R.string.widgetcfg_selection_tasks
+                                tasks -> R.string.widgetcfg_all_tasks
+                                f.restricted -> R.string.widgetcfg_selection_count
+                                else -> R.string.widgetcfg_all_count
+                            },
+                            count,
+                        ),
                         Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium,
                     )
                     if (f.restricted) TextButton({ f = f.copy(folders = emptySet(), tags = emptySet(), notes = emptySet()) }) { Text(stringResource(R.string.widgetcfg_reset)) }
@@ -219,16 +229,18 @@ private fun WidgetConfigScreen(
             item {
                 OutlinedTextField(
                     f.title, { f = f.copy(title = it) }, Modifier.fillMaxWidth(), singleLine = true,
-                    label = { Text(stringResource(R.string.widgetcfg_widget_title)) }, placeholder = { Text(stringResource(R.string.widget_list_title)) },
+                    label = { Text(stringResource(R.string.widgetcfg_widget_title)) }, placeholder = { Text(stringResource(if (tasks) R.string.widget_tasks_title else R.string.widget_list_title)) },
                 )
-                Section(stringResource(R.string.widgetcfg_content))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (c in WidgetFilter.Content.entries) FilterChip(
-                        selected = f.content == c, onClick = { f = f.copy(content = c) }, label = { Text(stringResource(c.label)) },
-                    )
+                if (!tasks) {
+                    Section(stringResource(R.string.widgetcfg_content))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (c in WidgetFilter.Content.entries) FilterChip(
+                            selected = f.content == c, onClick = { f = f.copy(content = c) }, label = { Text(stringResource(c.label)) },
+                        )
+                    }
                 }
                 Text(
-                    stringResource(R.string.widgetcfg_hint),
+                    stringResource(if (tasks) R.string.widgetcfg_hint_tasks else R.string.widgetcfg_hint),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(top = 12.dp),
                 )

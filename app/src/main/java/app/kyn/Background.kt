@@ -119,6 +119,7 @@ class NotesWidget : AppWidgetProvider() {
             val mgr = AppWidgetManager.getInstance(ctx)
             val ids = mgr.getAppWidgetIds(ComponentName(ctx, NotesWidget::class.java))
             if (ids.isNotEmpty()) runCatching { update(ctx, mgr, ids) }
+            TasksWidget.refresh(ctx) // same triggers: save, sync, tick, delete
         }
 
         private sealed interface Row {
@@ -164,7 +165,8 @@ class NotesWidget : AppWidgetProvider() {
             return out
         }
 
-        private fun bg(i: Int, size: Int) = when {
+        /** Card background for row [i] of [size] rows (rounded top, middle, bottom). */
+        internal fun bg(i: Int, size: Int) = when {
             size == 1 -> R.drawable.wcard_single
             i == 0 -> R.drawable.wcard_top
             i == size - 1 -> R.drawable.wcard_bottom
@@ -260,6 +262,7 @@ class WidgetAction : Activity() {
         val toggle = intent.getStringExtra("toggle")
         val line = intent.getStringExtra("line")
         val edit = intent.getStringExtra("edit")
+        val open = intent.getStringExtra("open")
         val app = applicationContext
         when {
             toggle != null && line != null -> CoroutineScope(Dispatchers.IO).launch {
@@ -268,6 +271,10 @@ class WidgetAction : Activity() {
             }
             edit != null -> startActivity(
                 Intent(this, MainActivity::class.java).putExtra("edit", edit)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            open != null -> startActivity(
+                Intent(this, MainActivity::class.java).putExtra("open", open)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         }

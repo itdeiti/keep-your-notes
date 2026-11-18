@@ -189,16 +189,28 @@ private fun QuickTaskDialog(onSave: (String, LocalDate?, LocalTime?) -> Unit, on
     )
 }
 
-/** One-tap widget: opens [QuickTaskActivity]. */
+/** One-tap widget: opens [QuickTaskActivity]. Resizable; at one cell only the icon is shown. */
 class TaskWidget : AppWidgetProvider() {
     override fun onUpdate(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-        val v = RemoteViews(ctx.packageName, R.layout.widget_task)
-        val pi = PendingIntent.getActivity(
+        fun views(layout: Int) = RemoteViews(ctx.packageName, layout).apply {
+            setOnClickPendingIntent(R.id.w_task, newTask(ctx))
+        }
+        // the launcher picks the layout that fits the current size
+        val v = RemoteViews(
+            mapOf(
+                android.util.SizeF(40f, 40f) to views(R.layout.widget_task_small),
+                android.util.SizeF(110f, 40f) to views(R.layout.widget_task),
+            ),
+        )
+        ids.forEach { mgr.updateAppWidget(it, v) }
+    }
+
+    companion object {
+        /** Opens the quick task dialog; also used by the ＋ of the task list widget. */
+        fun newTask(ctx: Context): PendingIntent = PendingIntent.getActivity(
             ctx, 10,
             Intent(ctx, QuickTaskActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        v.setOnClickPendingIntent(R.id.w_task, pi)
-        ids.forEach { mgr.updateAppWidget(it, v) }
     }
 }

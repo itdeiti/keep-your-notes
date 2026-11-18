@@ -79,4 +79,7 @@
     <string name="mdview_link_blocked">Link type blocked for security reasons</string>
     <!-- %1$s = note name -->
     <string name="mdview_note_not_found">Note “%1$s” not found</string>
+    <string name="widgetcfg_selection_tasks">Selection · %1$d open tasks</string>
+    <string name="widgetcfg_all_tasks">All open tasks · %1$d</string>
+    <string name="widgetcfg_hint_tasks">Without a selection below, the widget shows the open tasks of all notes. Folders, tags and notes can be combined.</string>
 </resources>

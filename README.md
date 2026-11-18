@@ -20,7 +20,7 @@ Quick capture like Keep, but no cloud account and no lock-in: notes are plain `.
 - **Keep-style list** – the whole vault as cards, newest first, pinned on top, with search, tag chips and folder filter.
 - **Markdown editor** – highlighting, toolbar, list continuation, nested lists, tables, and a read view with tappable checkboxes and links (`https://…`, `[[wiki links]]`, relative `.md` links).
 - **Tasks and reminders** – due dates, reminders and recurring tasks in the [Obsidian Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) format, a task overview (overdue, today, next 7 days …) and "Erledigt" right from the notification.
-- **Configurable widgets** – the note-list widget shows any mix of folders, tags and single notes; tick tasks without opening the app.
+- **Configurable widgets** – a note list and a task list (grouped by due date), each limited to any mix of folders, tags and single notes; tick tasks right on the home screen.
 - **Web clipping** – shared pages are reduced to the article (Firefox reader mode) and converted to Markdown, like the Obsidian Web Clipper.
 - **Git sync that survives conflicts** – every save is a commit (works offline), push when online, pull on start and every 3 hours; a conflict never loses text but leaves a visible conflict copy.
 - **Privacy** – PIN lock, no recent-apps preview, vault either shared with Obsidian on the phone or private to the app, no analytics, no backend besides your Git host.
@@ -46,7 +46,7 @@ Requirements: Android 12 or newer, a **private** Git repository for the vault (G
 1. **Repository and token** – create a private repo, e.g. `vault`, and a fine-grained token: GitHub → Settings → Developer settings → Fine-grained tokens, repository access *only* `vault`, permission **Contents: Read and write**.
 2. **Install** – download `kyn.apk` from the [latest release](https://github.com/itdeiti/keep-your-notes/releases/latest) and open it on the phone, or `adb install -r kyn.apk`.
 3. **Set up** – in the app choose where the vault lives (shared with Obsidian or private), allow the requested permissions, enter repo URL, token, name and email for commits, then "Save & clone".
-4. **Widgets** – add "Quick note", "Task" or "Note list" from the home-screen widget list.
+4. **Widgets** – add "Quick note", "Task", "Note list" or "Task list" from the home-screen widget list.
 5. **Desktop** – clone the same repo and open it in Obsidian, see [Desktop with Obsidian](#desktop-with-obsidian).
 
 ## Usage reference
@@ -73,8 +73,9 @@ Tasks use the Obsidian Tasks/Reminder format:
 <summary><b>Widgets</b></summary>
 
 - **Quick note** – new note, checklist or dictation in one tap.
-- **Task** – quick task with date and reminder (see above).
+- **Task** – quick task with date and reminder (see above). Resizable down to one cell (then only ＋⏰).
 - **Note list** – Keep-style cards; tap a checkbox to tick it without opening the app, tap text to edit. Each widget has its own settings (on placing it, or long-press → widget settings): title, content (all / tasks / open tasks / titles) and any mix of folders, tags and single notes, combined with OR.
+- **Task list** – every open task grouped like the task overview (overdue, today, next 7 days, later, no date) with due date, time and 🔁 rule; tick the checkbox to complete a task, tap the text to open its note, ＋ adds a task like the "Task" widget. Optional settings (long-press → widget settings): title and any mix of folders, tags and single notes.
 
 </details>
 

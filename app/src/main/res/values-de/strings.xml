@@ -121,4 +121,11 @@
     <string name="settings_language_title">%1$d. Sprache</string>
     <string name="settings_language_device">Wie Gerät</string>
     <string name="settings_language_device_only">Die App folgt der Gerätesprache (eine eigene Sprache pro App gibt es ab Android 13).</string>
+
+    <string name="widget_tasks_label">Aufgabenliste</string>
+    <string name="widget_tasks_desc">Offene Aufgaben nach Fälligkeit, direkt auf dem Homescreen abhaken</string>
+    <string name="widget_tasks_title">Aufgaben</string>
+    <string name="widget_tasks_empty">Keine offenen Aufgaben</string>
+    <string name="widget_tasks_empty_filtered">Keine offenen Aufgaben in dieser Auswahl</string>
+    <string name="widget_tasks_config_label">Aufgabenliste einrichten</string>
 </resources>

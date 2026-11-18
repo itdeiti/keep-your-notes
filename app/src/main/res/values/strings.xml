@@ -139,4 +139,12 @@
     <string name="settings_language_title">%1$d. Language</string>
     <string name="settings_language_device">Like device</string>
     <string name="settings_language_device_only">The app follows the device language (choosing a language per app needs Android 13).</string>
+
+    <!-- task list widget -->
+    <string name="widget_tasks_label">Task list</string>
+    <string name="widget_tasks_desc">Open tasks by due date, tick them right on the home screen</string>
+    <string name="widget_tasks_title">Tasks</string>
+    <string name="widget_tasks_empty">No open tasks</string>
+    <string name="widget_tasks_empty_filtered">No open tasks in this selection</string>
+    <string name="widget_tasks_config_label">Set up task list</string>
 </resources>

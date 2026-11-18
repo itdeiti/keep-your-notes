@@ -252,13 +252,14 @@ class AppVM(app: Application) : AndroidViewModel(app) {
                 Share(i.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString().orEmpty(), null, true),
             )
             i.hasExtra("conflicts") -> { saveEditor(); showConflicts = true; screen = Screen.List; reload() }
+            i.hasExtra("tasks") -> { saveEditor(); showTasks() }
             i.hasExtra("new") -> newNote(i.getStringExtra("new") ?: "note")
             i.hasExtra("open") -> openPath(i.getStringExtra("open")!!)
             i.hasExtra("edit") -> openPath(i.getStringExtra("edit")!!, edit = true)
             else -> return
         }
         // Consume, so a configuration change does not replay it.
-        i.removeExtra("new"); i.removeExtra("open"); i.removeExtra("edit"); i.removeExtra("conflicts"); i.action = null
+        i.removeExtra("new"); i.removeExtra("open"); i.removeExtra("edit"); i.removeExtra("conflicts"); i.removeExtra("tasks"); i.action = null
     }
 
     // ---------- editor ----------
