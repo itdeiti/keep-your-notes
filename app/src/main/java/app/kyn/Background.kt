@@ -44,6 +44,7 @@ class App : Application() {
         // JGit looks for ~/.gitconfig; Android has no home directory.
         System.setProperty("user.home", filesDir.absolutePath)
         ThemeMode.apply(this)
+        FontSize.load(this)
         Reminders.createChannel(this)
         Conflicts.createChannel(this)
         SyncWorker.schedulePeriodic(this)

@@ -8,15 +8,53 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 
-/** Material You colors from the wallpaper, light or dark per [ThemeMode]. Used by every activity. */
+/**
+ * Material You colors from the wallpaper, light or dark per [ThemeMode], text scaled per [FontSize].
+ * Used by every activity.
+ */
 @Composable
 fun KynTheme(content: @Composable () -> Unit) {
     val ctx = LocalContext.current
     // isSystemInDarkTheme() already reflects the app's own night mode set by ThemeMode.apply
     val scheme = if (isSystemInDarkTheme()) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-    MaterialTheme(colorScheme = scheme, content = content)
+    val d = LocalDensity.current
+    // on top of the device's font size, so accessibility settings still apply
+    CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * FontSize.current.factor)) {
+        MaterialTheme(colorScheme = scheme, content = content)
+    }
+}
+
+/** Text size of the app's own screens. The home-screen widgets are drawn by the launcher and follow the device. */
+enum class FontSize(@StringRes val label: Int, val factor: Float) {
+    Small(R.string.font_small, 0.85f),
+    Normal(R.string.font_normal, 1f),
+    Large(R.string.font_large, 1.15f),
+    Huge(R.string.font_huge, 1.3f);
+
+    companion object {
+        /** Compose state, so open screens resize right away. */
+        var current by mutableStateOf(Normal)
+            private set
+
+        private fun sp(ctx: Context) = ctx.getSharedPreferences("cfg", Context.MODE_PRIVATE)
+
+        fun load(ctx: Context) {
+            current = runCatching { valueOf(sp(ctx).getString("font", Normal.name)!!) }.getOrDefault(Normal)
+        }
+
+        fun save(ctx: Context, f: FontSize) {
+            sp(ctx).edit().putString("font", f.name).apply()
+            current = f
+        }
+    }
 }
 
 /**

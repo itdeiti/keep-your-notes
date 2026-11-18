@@ -1,7 +1,8 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package app.kyn
 
 import android.Manifest
+import androidx.compose.foundation.layout.FlowRow
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
@@ -1012,6 +1013,14 @@ fun SettingsScreen(vm: AppVM) {
                     selected = theme == m,
                     onClick = { theme = m; ThemeMode.save(ctx, m) },
                     label = { Text(stringResource(m.label)) },
+                )
+            }
+            Text(stringResource(R.string.settings_font_size), style = MaterialTheme.typography.bodyMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (f in FontSize.entries) FilterChip(
+                    selected = FontSize.current == f,
+                    onClick = { FontSize.save(ctx, f) },
+                    label = { Text(stringResource(f.label)) },
                 )
             }
             LanguageSettings(number = 6)

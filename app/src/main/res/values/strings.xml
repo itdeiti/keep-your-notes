@@ -147,4 +147,9 @@
     <string name="widget_tasks_empty">No open tasks</string>
     <string name="widget_tasks_empty_filtered">No open tasks in this selection</string>
     <string name="widget_tasks_config_label">Set up task list</string>
+    <string name="settings_font_size">Text size</string>
+    <string name="font_small">Small</string>
+    <string name="font_normal">Normal</string>
+    <string name="font_large">Large</string>
+    <string name="font_huge">Very large</string>
 </resources>

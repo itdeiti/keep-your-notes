@@ -20,12 +20,12 @@ Quick capture like Keep, but no cloud account and no lock-in: notes are plain `.
 - **Keep-style list** – the whole vault as cards, newest first, pinned on top, with search, tag chips and folder filter.
 - **Markdown editor** – highlighting, toolbar, list continuation, nested lists, tables, and a read view with tappable checkboxes and links (`https://…`, `[[wiki links]]`, relative `.md` links).
 - **Tasks and reminders** – due dates, reminders and recurring tasks in the [Obsidian Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) format, a task overview (overdue, today, next 7 days …) and "Erledigt" right from the notification.
-- **Configurable widgets** – a note list and a task list (grouped by due date), each limited to any mix of folders, tags and single notes; tick tasks right on the home screen.
+- **Configurable widgets** – a note list and a task list (grouped by due date), each limited to (or hiding) any mix of folders, tags and single notes; tick tasks right on the home screen.
 - **Web clipping** – shared pages are reduced to the article (Firefox reader mode) and converted to Markdown, like the Obsidian Web Clipper.
 - **Git sync that survives conflicts** – every save is a commit (works offline), push when online, pull on start and every 3 hours; a conflict never loses text but leaves a visible conflict copy.
 - **Privacy** – PIN lock, no recent-apps preview, vault either shared with Obsidian on the phone or private to the app, no analytics, no backend besides your Git host.
 - **Properties and tags** – edit frontmatter fields (with date picker) and tags in the app; Obsidian sees the same properties.
-- **Light/dark and language** – follow the device or set per app (English, German; more via [Translations](#translations)).
+- **Light/dark, text size and language** – follow the device or set per app (English, German; more via [Translations](#translations)).
 - **Optional: nightly inbox sorting** – a local LLM on the Mac sorts new notes from `inbox/` into folders and tags them. Nothing leaves the machine.
 
 ## How it works
@@ -74,8 +74,8 @@ Tasks use the Obsidian Tasks/Reminder format:
 
 - **Quick note** – new note, checklist or dictation in one tap.
 - **Task** – quick task with date and reminder (see above). Resizable down to one cell (then only ＋⏰).
-- **Note list** – Keep-style cards; tap a checkbox to tick it without opening the app, tap text to edit. Each widget has its own settings (on placing it, or long-press → widget settings): title, content (all / tasks / open tasks / titles) and any mix of folders, tags and single notes, combined with OR.
-- **Task list** – every open task grouped like the task overview (overdue, today, next 7 days, later, no date) with due date, time and 🔁 rule; tick the checkbox to complete a task, tap the text to open its note, ＋ adds a task like the "Task" widget. Optional settings (long-press → widget settings): title and any mix of folders, tags and single notes.
+- **Note list** – Keep-style cards; tap a checkbox to tick it without opening the app, tap text to edit. Each widget has its own settings (on placing it, or long-press → widget settings): title, content (all / tasks / open tasks / titles) and any mix of folders, tags and single notes, combined with OR, either shown alone or hidden ("Hide these").
+- **Task list** – every open task grouped like the task overview (overdue, today, next 7 days, later, no date) with due date, time, 🔁 rule and the note it is in; tick the checkbox to complete a task, tap the text to open its note, ＋ adds a task like the "Task" widget. Optional settings (long-press → widget settings): title and any mix of folders, tags and single notes to show alone or to hide (e.g. packing lists).
 
 </details>
 

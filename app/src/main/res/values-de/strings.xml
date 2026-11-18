@@ -128,4 +128,9 @@
     <string name="widget_tasks_empty">Keine offenen Aufgaben</string>
     <string name="widget_tasks_empty_filtered">Keine offenen Aufgaben in dieser Auswahl</string>
     <string name="widget_tasks_config_label">Aufgabenliste einrichten</string>
+    <string name="settings_font_size">Schriftgröße</string>
+    <string name="font_small">Klein</string>
+    <string name="font_normal">Normal</string>
+    <string name="font_large">Groß</string>
+    <string name="font_huge">Sehr groß</string>
 </resources>
