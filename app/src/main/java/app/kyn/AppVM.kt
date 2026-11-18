@@ -66,7 +66,22 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     private var secretSaved: String? = null
     private var secretMtime = 0L
     private val secretLock = Mutex()
-    private val dropDrafts: () -> Unit = { secretDraft = null; secretBase = null; secretSaved = null }
+    /** Encrypted section being edited in the editor (draft in memory only); null = no dialog. */
+    var sectionDraft by mutableStateOf<String?>(null)
+    var sectionSaving by mutableStateOf(false)
+        private set
+    var sectionFailed by mutableStateOf(false)
+        private set
+    /** Changes per opened dialog, so its text field starts fresh. */
+    var sectionKey by mutableIntStateOf(0)
+        private set
+    private var sectionInline: MeldCrypto.Inline? = null
+    private var sectionOriginal: String? = null
+
+    private val dropDrafts: () -> Unit = {
+        secretDraft = null; secretBase = null; secretSaved = null
+        sectionDraft = null; sectionInline = null; sectionOriginal = null
+    }
 
     /** Where the editor goes back to. */
     private var returnTo = Screen.List
@@ -381,14 +396,23 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     // ---------- encrypted notes (read-only) ----------
 
     private fun openSecret(n: Note) {
+        if (secretNote?.path != n.path) {
+            // another note: save the open draft first, then start clean (draft, password, hint, mtime belong to the old note)
+            if (secretDraft != null) { saveSecret { resetSecretEdit(); openSecret(n) }; return }
+            resetSecretEdit()
+        }
         if (screen != Screen.Edit && screen != Screen.Secret) returnTo = if (screen == Screen.Tasks) Screen.Tasks else Screen.List
         secretNote = n
         screen = Screen.Secret
     }
 
+    private fun resetSecretEdit() {
+        secretDraft = null; secretBase = null; secretSaved = null; secretHint = ""; secretMtime = 0L
+    }
+
     fun closeSecret() {
         saveSecret {
-            secretDraft = null
+            resetSecretEdit()
             secretNote = null
             screen = returnTo
             reload()
@@ -414,7 +438,8 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     /**
      * Encrypt the draft with the password that opened the note and write it (only ciphertext reaches disk,
      * see [Vault.writeEncrypted]). If the file changed meanwhile (sync, Obsidian), the draft goes to a
-     * conflict copy next to it. [then] runs on the main thread afterwards, also when nothing changed.
+     * conflict copy next to it. [then] runs on the main thread after a successful save (or when nothing
+     * changed), never after a failure.
      */
     fun saveSecret(then: () -> Unit = {}) {
         val text = secretDraft
@@ -422,13 +447,13 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         val n = secretNote
         if (text == null || base == null || n == null || text == secretSaved) { then(); return }
         viewModelScope.launch {
-            secretLock.withLock {
+            val ok = secretLock.withLock {
                 secretSaving = true
                 try {
                     val b = SecretSession.encryptLike(base, text)
                     if (b == null) {
                         Toast.makeText(ctx, ctx.getString(R.string.secret_save_failed), Toast.LENGTH_LONG).show()
-                        return@withLock
+                        return@withLock false
                     }
                     val root = Vault.dir(ctx)
                     var path = n.path
@@ -444,14 +469,42 @@ class AppVM(app: Application) : AndroidViewModel(app) {
                     if (path != n.path) secretNote = n.copy(path = path, modified = secretMtime)
                     secretRev++
                     afterChangeNow(ctx.getString(R.string.commit_note, titleOf(path)))
+                    true
                 } catch (e: Exception) {
                     Toast.makeText(ctx, ctx.getString(R.string.secret_save_failed), Toast.LENGTH_LONG).show()
-                    return@withLock
+                    false
                 } finally {
                     secretSaving = false
                 }
             }
-            then()
+            // on failure the draft stays (Done/Back/Lock do not run), so nothing typed is lost
+            if (ok) then()
+        }
+    }
+
+    fun startSection(i: MeldCrypto.Inline, plain: String) {
+        sectionInline = i
+        sectionOriginal = plain
+        sectionDraft = plain
+        sectionFailed = false
+        sectionKey++
+    }
+
+    fun cancelSection() {
+        sectionDraft = null; sectionInline = null; sectionOriginal = null
+    }
+
+    /** Encrypt the section draft into the note (also on leaving the app); keeps the draft if that fails. */
+    fun saveSection() {
+        val i = sectionInline
+        val text = sectionDraft
+        if (i == null || text == null || sectionSaving) return
+        if (text == sectionOriginal) { cancelSection(); return }
+        sectionSaving = true
+        viewModelScope.launch {
+            val ok = try { replaceSection(i, text) } catch (_: Exception) { false }
+            sectionSaving = false
+            if (ok) { if (sectionInline === i) cancelSection() } else sectionFailed = true
         }
     }
 
@@ -468,6 +521,8 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         val path = edPath ?: run { password.fill('\u0000'); return false }
         val text = Vault.serialize(edFront, edBody.text)
         val root = Vault.dir(ctx)
+        val source = File(root, path)
+        val snapshotMtime = source.lastModified()
         val folder = path.substringBeforeLast('/', "")
         val base = (if (folder.isEmpty()) "" else "$folder/") + titleOf(path)
         var target = "$base.mdenc"
@@ -475,9 +530,19 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         while (File(root, target).exists()) target = "$base ${n++}.mdenc"
         return try {
             val b = SecretSession.encryptNew(text, password)
-            withContext(Dispatchers.IO) {
+            val problem = withContext(Dispatchers.IO) {
+                // the note may have changed while encrypting (sync, widget): never delete newer plaintext
+                if (source.lastModified() != snapshotMtime) return@withContext R.string.editor_changed_meanwhile
                 Vault.writeEncrypted(root, target, MeldCrypto.fileJson(hint, b))
-                File(root, path).delete()
+                if (!source.delete() && source.exists()) {
+                    File(root, target).delete() // roll back: a note must not exist as plaintext and ciphertext
+                    return@withContext R.string.secret_delete_failed
+                }
+                null
+            }
+            if (problem != null) {
+                Toast.makeText(ctx, ctx.getString(problem), Toast.LENGTH_LONG).show()
+                return false
             }
             // drop the plaintext from the editor before anything else can save it
             edPath = null; edTitle = ""; edFront = emptyList(); edBody = TextFieldValue(""); edSaved = snapshot(); edMtime = 0L

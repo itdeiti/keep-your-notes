@@ -153,7 +153,7 @@ abstract class LockedActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (!isChangingConfigurations) { AppLock.onBackground(); SecretSession.onBackground() }
+        if (!isChangingConfigurations) { AppLock.onBackground(); SecretSession.onBackground(this) }
     }
 
     private fun secure() = SecretSession.secureWindow(this)

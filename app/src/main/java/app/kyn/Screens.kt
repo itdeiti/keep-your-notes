@@ -324,7 +324,8 @@ fun EditorScreen(vm: AppVM) {
     var confirmDelete by remember { mutableStateOf(false) }
     var pickRecur by remember { mutableStateOf(false) }
     var encrypt by remember { mutableStateOf<Boolean?>(null) } // false = whole note, true = selection
-    encrypt?.let { inline ->
+    SectionEditDialog(vm)
+    encrypt?.takeIf { !AppLock.locked }?.let { inline ->
         NewSecretDialog(
             inline,
             onConfirm = { pw, hint, visible -> if (inline) vm.encryptSelection(pw, hint, visible) else vm.encryptNote(pw, hint) },
@@ -443,7 +444,7 @@ fun EditorScreen(vm: AppVM) {
                         onToggle = { vm.toggleTask(it) },
                         onEdit = { vm.editAt(it) },
                         onLink = { openLink(ctx, vm, it) },
-                        onEditSecret = { i, t -> vm.replaceSection(i, t) },
+                        onEditSecret = { i, t -> vm.startSection(i, t) },
                         modifier = Modifier.fillMaxWidth().heightIn(min = 320.dp)
                             .clickable { vm.editAt(null) }
                             .padding(16.dp),

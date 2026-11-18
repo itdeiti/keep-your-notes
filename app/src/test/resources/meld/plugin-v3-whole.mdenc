@@ -1,0 +1,17 @@
+{
+  "version": "3.0",
+  "hint": "",
+  "encodedData": "FQJhsf8E7iHhgIOj3myfIDnOplQTKx968nufyLTJWUfXwGGOTYRW8RrxceNCRH77+E79IndDfrR+XXJdWNX/drFzBcIkO6Erx700JoHzLJbxtY7/CqK/IQM=",
+  "kdf": {
+    "name": "PBKDF2",
+    "hash": "SHA-512",
+    "iterations": 220000,
+    "salt": "Qqwpu1H81eqn+T4tV8v9Cw=="
+  },
+  "cipher": {
+    "name": "AES-GCM",
+    "keyLength": 256,
+    "iv": "tKTQkUJdj6RWkCy8",
+    "tagLength": 128
+  }
+}

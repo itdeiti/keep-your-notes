@@ -46,6 +46,34 @@ class MeldCryptoTest {
         assertEquals(legacyText, MeldCrypto.decrypt(f.blob!!, legacyPass))
     }
 
+    // ---------- real v3 output of the plugin (Meld Encrypt 3.1.1, created in Obsidian) ----------
+
+    private val pluginPass = "plugin-test-password".toCharArray()
+
+    @Test fun v3WholeNoteFromPlugin() {
+        val f = MeldCrypto.parseFile(res("plugin-v3-whole.mdenc"))
+        val (front, body) = Vault.parse(MeldCrypto.decrypt(f.blob!!, pluginPass)!!)
+        // the plugin encrypts the whole file, frontmatter included (as kyn does)
+        assertTrue(front.any { it.startsWith("created:") })
+        assertEquals("Plugin v3 Testtext café 🥑", body.trim())
+    }
+
+    @Test fun v3InlineFromPlugin() {
+        val line = res("plugin-v3-inline.md").lines().first { "🔐" in it }
+        val i = MeldCrypto.findInline(line).single()
+        assertEquals('γ', i.version)
+        assertFalse(i.hidden)
+        assertEquals("Inline v3 Testtext", MeldCrypto.decrypt(MeldCrypto.blob(i), pluginPass))
+    }
+
+    @Test fun kynFileMatchesPluginFileLayout() {
+        // same structure as the plugin's own file, only the random values differ
+        val mask = Regex("""": "[A-Za-z0-9+/=]{8,}"""")
+        val plugin = res("plugin-v3-whole.mdenc").replace(mask, "\": \"X\"")
+        val kyn = MeldCrypto.fileJson("", MeldCrypto.encryptV3("x", pluginPass)).replace(mask, "\": \"X\"")
+        assertEquals(plugin.trimEnd(), kyn)
+    }
+
     @Test fun wrongPasswordIsNull() {
         val f = MeldCrypto.parseFile(res("v3-whole.mdenc"))
         assertNull(MeldCrypto.decrypt(f.blob!!, "falsch".toCharArray()))
@@ -71,8 +99,31 @@ class MeldCryptoTest {
 
     @Test fun v3IterationBounds() {
         val low = res("v3-whole.mdenc").replace("\"iterations\": 220000", "\"iterations\": 1000")
-        val high = res("v3-whole.mdenc").replace("\"iterations\": 220000", "\"iterations\": 2000001")
+        val high = res("v3-whole.mdenc").replace("\"iterations\": 220000", "\"iterations\": 1000001")
         for (t in listOf(low, high)) try { MeldCrypto.parseFile(t); fail() } catch (_: MeldCrypto.Unsupported) {}
+    }
+
+    @Test fun craftedLinesStayFast() {
+        // crafted lines from the synced repo must not make rendering hang (was quadratic)
+        val evil = "🔐γ 💡AAAA💡".repeat(8_000) // 96k chars
+        val evil2 = "🔐γ " + "A".repeat(150_000) // long Base64 run without end marker
+        val t = System.nanoTime()
+        assertTrue(MeldCrypto.findInline(evil).isEmpty())
+        assertTrue(MeldCrypto.findInline(evil2).isEmpty())
+        assertTrue(MeldCrypto.findInline("x 🔐 " + "A".repeat(300_000)).isEmpty()) // over the line limit
+        val ms = (System.nanoTime() - t) / 1_000_000
+        assertTrue("took $ms ms", ms < 300)
+    }
+
+    @Test fun hintBounds() {
+        val ok = "🔐γ 💡${"h".repeat(200)}💡$v3Inline 🔐"
+        assertEquals(200, MeldCrypto.findInline(ok).single().hint.length)
+        assertTrue(MeldCrypto.findInline("🔐γ 💡${"h".repeat(201)}💡$v3Inline 🔐").none { it.hint.length > 200 })
+    }
+
+    @Test fun derivationCanBeCancelled() {
+        val f = MeldCrypto.parseFile(res("v3-whole.mdenc"))
+        try { MeldCrypto.decrypt(f.blob!!, pass) { true }; fail() } catch (_: java.util.concurrent.CancellationException) {}
     }
 
     @Test fun oldAndUnknownFormatsAreUnsupported() {

@@ -42,6 +42,7 @@ class MainActivity : LockedActivity() {
     override fun onStop() {
         vm.saveEditor()
         vm.saveSecret()
+        vm.saveSection()
         super.onStop()
     }
 }

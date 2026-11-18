@@ -72,7 +72,7 @@ private fun MdTable(rows: List<String>, c: MdColors, onTap: () -> Unit, onLink: 
 internal fun MarkdownView(
     body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, onLink: (String) -> Unit, modifier: Modifier,
     readOnly: Boolean = false,
-    onEditSecret: (suspend (MeldCrypto.Inline, String) -> Boolean)? = null,
+    onEditSecret: ((MeldCrypto.Inline, String) -> Unit)? = null,
 ) {
     val base = MaterialTheme.typography.bodyLarge
     val lines = body.split("\n")
