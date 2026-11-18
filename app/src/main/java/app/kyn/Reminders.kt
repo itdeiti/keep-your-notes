@@ -120,11 +120,12 @@ object Reminders {
         val open = Markdown.TASK.find(line)?.groupValues?.get(2) == " "
         if (onlyOpen && !open) return
         f.writeText(Markdown.toggleTaskLine(text, idx))
+        // widgets and alarms first, so the tick shows right away; the commit may wait for a running sync
+        runCatching { NotesWidget.refresh(ctx) }
+        runCatching { rescan(ctx) }
         val what = Markdown.stripTaskMeta(line.substringAfter("] "))
         GitSync.commit(ctx, ctx.getString(if (open) R.string.commit_done else R.string.commit_reopened, what))
         SyncWorker.enqueue(ctx)
-        rescan(ctx)
-        NotesWidget.refresh(ctx)
     }
 }
 
