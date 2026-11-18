@@ -2,16 +2,19 @@
 
 Alles, was nötig ist, damit nach einem neuen oder zurückgesetzten Mac wieder läuft: App bauen und aufs Handy bringen, Vault in Obsidian, abendliches Inbox-Sortieren mit lokaler KI.
 
-Nur die App aufs Handy bringen, ohne etwas zu bauen? Dann reichen Schritt 1 (Homebrew, `android-platform-tools`) und Schritt 6 mit `apk/notizen.apk`.
+Allgemeine Fassung. Ersetze `<konto>` durch dein GitHub-Konto und `<vault>` durch den Namen deines **privaten** Vault-Repos. Die Ordner `~/kyn` und `~/vault` sind Vorschläge; wer andere nimmt, passt die Befehle an. Tipp: Eine eigene Fassung mit deinen echten Werten gehört in den privaten Vault, nicht in ein öffentliches Repo.
+
+Nur die App aufs Handy bringen, ohne etwas zu bauen? Dann reichen Schritt 1 (Homebrew, `android-platform-tools`) und Schritt 6 mit der APK aus den GitHub Releases.
 
 ## Was nur auf dem Mac liegt (vorher sichern)
 
 | Was | Wo | Ersatz, falls verloren |
 |---|---|---|
-| SSH-Schlüssel für GitHub (privat) | `~/.ssh/id_ed25519_gh_itdeiti` (+ `.pub`) und Eintrag `Host github-personal` in `~/.ssh/config` | neuen Schlüssel erzeugen und bei GitHub eintragen (Schritt 2) |
-| Ungepushte Commits | `~/workspace/personal/notizen-app`, `~/workspace/personal/notes-vault` | vorher `git status` / `git push` in beiden |
+| SSH-Schlüssel für GitHub (privat) | `~/.ssh/id_ed25519_github` (+ `.pub`) und Eintrag `Host github.com` in `~/.ssh/config` | neuen Schlüssel erzeugen und bei GitHub eintragen (Schritt 2) |
+| Release-Schlüssel der App | `~/.config/kyn/release.p12`, Passwort im Schlüsselbund (Eintrag `kyn-release-key`), Verweis in `~/kyn/keystore.properties` | **kein Ersatz**: ohne ihn nimmt das Handy keine Updates mehr an, die App müsste deinstalliert werden. Datei und Passwort zusätzlich im Passwort-Manager sichern |
+| Ungepushte Commits | `~/kyn`, `~/vault` | vorher `git status` / `git push` in beiden |
 
-Alles andere steht in den Repos oder lässt sich neu laden: Code, APK (GitHub Releases), Debug-Schlüssel der App, LaunchAgent-Vorlage, Sortier-Regeln (`notes-vault/.sortierung/`), Ollama-Modelle.
+Alles andere steht in den Repos oder lässt sich neu laden: Code, APK (GitHub Releases), LaunchAgent-Vorlage, Sortier-Regeln (`<vault>/.sortierung/`), Ollama-Modelle.
 
 ## 1. Programme
 
@@ -31,59 +34,59 @@ brew install --cask android-studio obsidian android-platform-tools
 - Im SDK Manager anhaken: **Android SDK Platform 36** und **Build-Tools 36**.
 - Das JDK bringt Android Studio mit (`jbr`), ein eigenes Java ist nicht nötig.
 
-## 2. GitHub-Zugang (privates Konto `itdeiti`)
+## 2. GitHub-Zugang (Konto `<konto>`)
 
-Beide Repos pushen per SSH über den Host-Alias `github-personal`. Das funktioniert unabhängig davon, welches `gh`-Konto gerade aktiv ist.
+Beide Repos pushen per SSH. Der Schlüssel wird für `github.com` hinterlegt.
 
 Schlüssel zurückkopieren oder neu erzeugen:
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_gh_itdeiti -C itdeiti
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_github -C <konto>
 ```
 
 ```bash
 gh auth login
 ```
 ```bash
-gh ssh-key add ~/.ssh/id_ed25519_gh_itdeiti.pub --title "Mac"
+gh ssh-key add ~/.ssh/id_ed25519_github.pub --title "Mac"
 ```
 
-Bei `gh auth login` mit dem Konto `itdeiti` anmelden.
+Bei `gh auth login` mit dem Konto `<konto>` anmelden.
 
 In `~/.ssh/config` ergänzen:
 
 ```
-Host github-personal
+Host github.com
   AddKeysToAgent yes
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/id_ed25519_gh_itdeiti
+  IdentityFile ~/.ssh/id_ed25519_github
   IdentitiesOnly yes
 ```
 
-Prüfen, erwartet wird „Hi itdeiti!“:
+Prüfen, erwartet wird „Hi <konto>!“:
 
 ```bash
-ssh -T git@github-personal
+ssh -T git@github.com
 ```
+
+Mehrere GitHub-Konten auf einem Mac (z. B. Arbeit und privat)? Dann statt `Host github.com` einen eigenen Alias anlegen, etwa `Host github-privat` mit `HostName github.com` und `User git`, und in allen Befehlen unten `git@github-privat:` statt `git@github.com:` verwenden. So nutzt der Push immer den richtigen Schlüssel, egal welches `gh`-Konto gerade aktiv ist.
 
 ## 3. Repos klonen
 
 ```bash
-mkdir -p ~/workspace/personal && cd ~/workspace/personal
+cd ~
 ```
 ```bash
-git clone git@github-personal:itdeiti/notizen-app.git
+git clone git@github.com:<konto>/keep-your-notes.git kyn
 ```
 ```bash
-git clone git@github-personal:itdeiti/notes-vault.git
+git clone git@github.com:<konto>/<vault>.git vault
 ```
 
-Die Pfade sind wichtig: Die LaunchAgent-Vorlage erwartet genau `~/workspace/personal/notizen-app` und `~/workspace/personal/notes-vault`. Der alte `zettelkasten` wird nicht mehr gebraucht, er ist vollständig importiert.
+Die LaunchAgent-Vorlage bekommt beide Pfade in Schritt 5 per `sed`.
 
 ## 4. Obsidian
 
-Obsidian öffnen, dann „Ordner als Vault öffnen“ und `~/workspace/personal/notes-vault` wählen.
+Obsidian öffnen, dann „Ordner als Vault öffnen“ und `~/vault` wählen.
 
 Für Sync aus Obsidian heraus das Community-Plugin **Git** (Vinzent03) installieren:
 - Auto commit-and-sync interval: 5 Minuten
@@ -92,10 +95,10 @@ Für Sync aus Obsidian heraus das Community-Plugin **Git** (Vinzent03) installie
 Wichtig, wenn der SSH-Schlüssel eine Passphrase hat: Obsidian kann sie nicht abfragen, Push und Pull aus dem Plugin scheitern dann ohne sichtbare Meldung. Deshalb die Passphrase einmal im Schlüsselbund ablegen:
 
 ```bash
-ssh-add --apple-use-keychain ~/.ssh/id_ed25519_gh_itdeiti
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519_github
 ```
 
-und im Eintrag `Host github-personal` in `~/.ssh/config` die Zeile `UseKeychain yes` ergänzen, damit der Schlüssel auch nach einem Neustart geladen wird. Test: eine Notiz ändern, in Obsidian Cmd+P → „Git: Commit-and-sync“, keine Fehlermeldung.
+und im Eintrag `Host github.com` in `~/.ssh/config` die Zeile `UseKeychain yes` ergänzen, damit der Schlüssel auch nach einem Neustart geladen wird. Test: eine Notiz ändern, in Obsidian Cmd+P → „Git: Commit-and-sync“, keine Fehlermeldung.
 
 Ohne das Plugin geht es auch, dann synct nur der Abend-Job.
 
@@ -115,22 +118,22 @@ Das Modell ist etwa 19 GB groß und braucht rund 20 GB freien Arbeitsspeicher w�
 LaunchAgent einrichten (läuft täglich um 21 Uhr):
 
 ```bash
-cd ~/workspace/personal/notizen-app
+cd ~/kyn
 ```
 ```bash
-sed "s#__HOME__#$HOME#g" tools/app.notizen.inbox-sort.plist > ~/Library/LaunchAgents/app.notizen.inbox-sort.plist
+sed -e "s#__APP__#$HOME/kyn#g" -e "s#__VAULT__#$HOME/vault#g" -e "s#__HOME__#$HOME#g" tools/app.kyn.inbox-sort.plist > ~/Library/LaunchAgents/app.kyn.inbox-sort.plist
 ```
 ```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.notizen.inbox-sort.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/app.kyn.inbox-sort.plist
 ```
 
 Einmal testen:
 
 ```bash
-launchctl kickstart gui/$(id -u)/app.notizen.inbox-sort
+launchctl kickstart gui/$(id -u)/app.kyn.inbox-sort
 ```
 ```bash
-tail ~/Library/Logs/notizen-inbox-sort.log
+tail ~/Library/Logs/kyn-inbox-sort.log
 ```
 
 Im Log soll eine Zeile `... verschoben N` stehen, keine Zeile `ollama_nicht_erreichbar` oder `pull_fehlgeschlagen`. Beim ersten Mal fragt macOS eventuell, ob Python Mitteilungen anzeigen darf, das bitte erlauben.
@@ -142,46 +145,64 @@ Am Handy einmalig: Einstellungen → Über das Telefon → 7× auf „Build-Numm
 **Fertige APK aus den GitHub Releases**, kein Bauen nötig:
 
 ```bash
-GH_TOKEN=$(gh auth token --user itdeiti) gh release download --repo itdeiti/notizen-app --pattern notizen.apk --dir /tmp --clobber
+gh release download --repo <konto>/keep-your-notes --pattern kyn.apk --dir /tmp --clobber
 ```
 ```bash
-adb install -r /tmp/notizen.apk
+adb install -r /tmp/kyn.apk
 ```
 
-**Oder selbst bauen und installieren:**
+**Oder selbst bauen und installieren** (braucht den Release-Schlüssel, siehe Schritt 7):
 
 ```bash
-cd ~/workspace/personal/notizen-app
+cd ~/kyn
 ```
 ```bash
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ```
 ```bash
-./gradlew installDebug
+./gradlew installRelease
 ```
 
-Die App ist mit dem Debug-Schlüssel aus dem Repo signiert (`app/debug.keystore`). Dadurch nimmt das Handy Updates von jedem Mac an, ohne dass die App deinstalliert werden muss. Ginge der Schlüssel verloren, müsste die App einmal deinstalliert werden. Dabei gehen Token und Einstellungen verloren, die Notizen nicht: Die liegen in `Documents/Vault` und auf GitHub.
+`./gradlew installDebug` installiert dagegen die getrennte App „KYN Debug“ (`app.kyn.debug`, signiert mit dem öffentlichen Debug-Schlüssel aus dem Repo). Sie hat eigene Einstellungen und einen eigenen Vault-Ordner und lässt die echte App in Ruhe. Zum Ausprobieren eignet sich der Emulator mit dem lokalen Test-Repo besser.
 
-Neue Handys oder eine Neuinstallation der App: in der App „Zugriff auf alle Dateien“ und Benachrichtigungen erlauben, dann Repo-URL `https://github.com/itdeiti/notes-vault.git` und einen fine-grained Token mit „Contents: Read and write“ nur für `notes-vault` eintragen. Mehr dazu in der `README.md`.
+Neue Handys oder eine Neuinstallation der App: in der App „Zugriff auf alle Dateien“ und Benachrichtigungen erlauben, dann Repo-URL `https://github.com/<konto>/<vault>.git` und einen fine-grained Token mit „Contents: Read and write“ nur für `<vault>` eintragen. Mehr dazu in der `README.md` des App-Repos.
 
-## 7. Neue Version veröffentlichen
+## 7. Release-Schlüssel und neue Version veröffentlichen
 
-Nach Änderungen an der App (committet und gepusht):
+**Neuer Mac, Schlüssel vorhanden:** Datei nach `~/.config/kyn/release.p12` zurückkopieren, dann Passwort in den Schlüsselbund und Verweis anlegen:
+
+```bash
+security add-generic-password -U -s kyn-release-key -a "$USER" -w
+```
+```bash
+printf 'storeFile=%s\nkeyAlias=kyn\nkeychainService=kyn-release-key\n' "$HOME/.config/kyn/release.p12" > ~/kyn/keystore.properties
+```
+
+**Allererster Schlüssel** (nur einmal überhaupt):
+
+```bash
+tools/make-release-key.sh
+```
+
+Danach Datei und Passwort im Passwort-Manager sichern.
+
+**Veröffentlichen** nach Änderungen an der App (committet und gepusht):
 
 ```bash
 tools/release.sh
 ```
 
-Das Skript baut die APK und legt ein GitHub Release `v0.<Anzahl Commits>` mit `notizen.apk` an, über das Konto `itdeiti` (egal, welches `gh`-Konto gerade aktiv ist). Die Versionsnummer kommt aus der Anzahl der Git-Commits; in der App steht sie unten in den Einstellungen.
+Das Skript baut die signierte Release-APK und legt ein GitHub Release `v0.<Anzahl Commits>` mit `kyn.apk` an, über das Konto `<konto>` (egal, welches `gh`-Konto gerade aktiv ist). Die Notes listen alle Commits seit dem letzten Release. Die Versionsnummer kommt aus der Anzahl der Git-Commits; in der App steht sie unten in den Einstellungen.
 
-Früher lag die APK im Repo (`apk/notizen.apk`, je Version etwa 27 MB). Sie ist seit dem Umzug auf Releases nicht mehr im Repo, die alten Versionen stecken aber noch in der Git-Historie. Wer das Repo verkleinern will, entfernt sie mit `git filter-repo --path apk/ --invert-paths` (schreibt die Historie um, danach `git push --force`).
+Früher lag die APK im Repo (`apk/kyn.apk`, je Version etwa 27 MB). Sie ist seit dem Umzug auf Releases nicht mehr im Repo, die alten Versionen stecken aber noch in der Git-Historie. Wer das Repo verkleinern will, entfernt sie mit `git filter-repo --path apk/ --invert-paths` (schreibt die Historie um, danach `git push --force`).
 
 ## Checkliste
 
-- [ ] `ssh -T git@github-personal` meldet „Hi itdeiti!“
-- [ ] beide Repos unter `~/workspace/personal/` geklont
-- [ ] Obsidian öffnet `notes-vault`
+- [ ] `ssh -T git@github.com` meldet „Hi <konto>!“
+- [ ] beide Repos geklont (`~/kyn`, `~/vault`)
+- [ ] Obsidian öffnet `~/vault`
 - [ ] `ollama list` zeigt `qwen2.5:32b`
-- [ ] `launchctl print gui/$(id -u)/app.notizen.inbox-sort` findet den Job, Testlauf im Log ok
+- [ ] `launchctl print gui/$(id -u)/app.kyn.inbox-sort` findet den Job, Testlauf im Log ok
+- [ ] `keystore.properties` vorhanden, `./gradlew assembleRelease` erzeugt `app-release.apk` (nicht `-unsigned`)
 - [ ] `adb devices` zeigt das Handy, App installiert, App synchronisiert („Synchronisiert HH:MM“)
 - [ ] In Obsidian klappt „Git: Commit-and-sync“ ohne Fehler (Passphrase im Schlüsselbund)

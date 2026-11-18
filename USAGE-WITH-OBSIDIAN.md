@@ -1,6 +1,6 @@
-# Notizen-App mit Obsidian nutzen
+# KYN mit Obsidian nutzen
 
-Der Vault (`notes-vault`) ist ein normaler Obsidian-Vault. Am Mac liegt er unter `~/workspace/personal/notes-vault`, auf dem Handy je nach Einstellung in `Documents/Vault` oder privat in der App. Abgeglichen wird über GitHub: am Mac mit dem Obsidian-Plugin **Git**, am Handy mit der App.
+Der Vault ist ein normaler Obsidian-Vault in einem privaten GitHub-Repo. Am Mac liegt er in einem beliebigen Ordner (in [SETUP-MAC.md](SETUP-MAC.md): `~/vault`), auf dem Handy je nach Einstellung in `Documents/Vault` oder privat in der App. Abgeglichen wird über GitHub: am Mac mit dem Obsidian-Plugin **Git**, am Handy mit der App.
 
 Einrichtung von Obsidian, Git-Plugin und SSH-Schlüssel: siehe [SETUP-MAC.md](SETUP-MAC.md).
 
