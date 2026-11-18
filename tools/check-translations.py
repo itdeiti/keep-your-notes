@@ -6,7 +6,7 @@
 
 Compares names of <string> and <plurals> in app/src/main/res/values/strings*.xml (English,
 default) with values-<lang>/strings*.xml, and the %1$s / %1$d placeholders of each string.
-Exit code 1 if something is missing, extra or has other placeholders.
+Exit code 1 if something is missing, extra, has other placeholders or contains a bare ".
 """
 import glob
 import os
@@ -30,11 +30,25 @@ def load(folder):
     return out
 
 
+def unescaped_quotes(folder):
+    """Android drops bare double quotes in string text; they must be written as \\"."""
+    out = []
+    for f in sorted(glob.glob(os.path.join(RES, folder, "strings*.xml"))):
+        for m in re.finditer(r'<(?:string|item)\b[^>]*>([^<]*)</', open(f, encoding="utf-8").read()):
+            if re.search(r'(?<!\\)"', m.group(1)):
+                out.append("%s: %s" % (os.path.basename(f), m.group(1)[:60]))
+    return out
+
+
 def main():
     base = load("values")
     langs = sys.argv[1:] or sorted(d[len("values-"):] for d in os.listdir(RES)
                                    if re.fullmatch(r"values-[a-z]{2,3}(-r[A-Z]{2})?", d))
     bad = 0
+    for folder in ["values"] + ["values-" + l for l in langs]:
+        for q in unescaped_quotes(folder):
+            print("  unescaped \"  %s/%s" % (folder, q))
+            bad += 1
     for lang in langs:
         tr = load("values-" + lang)
         missing = sorted(set(base) - set(tr))
