@@ -114,6 +114,15 @@ class MeldCryptoTest {
         assertEquals(legacyText, MeldCrypto.decrypt(MeldCrypto.blob(i), legacyPass))
     }
 
+    @Test fun visibleSectionAsLastLineOfNote() {
+        // shape seen on a real Obsidian note (Meld Encrypt 3.1.1, "show in reading view", hint, last line)
+        val line = "🔐γ 💡dev💡AQNbYCSvHgJTkpR6o2KuBvSLMk2MSOoI6jdu1oHiY2Y8sVITvP7FxwfCtyPh1B5zh/jthD+y4HFigFeL 🔐"
+        val body = Vault.parse("---\ncreated: 2026-11-18\n---\n# Titel\n\nText\n$line").second
+        val i = MeldCrypto.findInline(body.lines().last()).single()
+        assertEquals("dev", i.hint)
+        assertEquals("twelve chars", MeldCrypto.decrypt(MeldCrypto.blob(i), "dev-pass".toCharArray()))
+    }
+
     @Test fun twoSectionsInOneLine() {
         val line = "a %%🔐γ $v3Inline 🔐%% b 🔐γ 💡x💡$v3InlineHighIter 🔐 c"
         val found = MeldCrypto.findInline(line)
