@@ -64,9 +64,9 @@ object QuickTask {
     private val fileLock = Any()
 
     /**
-     * Only the file write: fast, so the dialog can close right away. Commit, alarms and widget
-     * follow in [afterWrite], off the UI path — a commit may wait minutes for a running sync
-     * (all git work shares one lock), which used to keep the widget dialog hanging.
+     * Only the file write. Runs under the git lock (see [save][QuickTaskActivity]), so a running sync
+     * cannot overwrite it; the dialog closes before that, as a sync may take a while.
+     * Commit, alarms and widget follow in [afterWrite].
      */
     fun write(ctx: Context, text: String, date: LocalDate?, time: LocalTime?): String {
         val root = Vault.dir(ctx)
@@ -117,11 +117,11 @@ class QuickTaskActivity : ComponentActivity() {
         if (saving) return
         saving = true
         val app = applicationContext
+        finish() // the write may wait for a running sync: never keep the dialog open for that
         App.scope.launch {
-            val line = runCatching { QuickTask.write(app, text, date, time) }.getOrNull()
+            val line = runCatching { GitSync.exclusive { QuickTask.write(app, text, date, time) } }.getOrNull()
             withContext(Dispatchers.Main) {
                 Toast.makeText(app, if (line != null) QuickTask.confirmation(app, date, time) else app.getString(R.string.quicktask_save_failed), Toast.LENGTH_SHORT).show()
-                finish()
             }
             if (line != null) QuickTask.afterWrite(app, line)
         }

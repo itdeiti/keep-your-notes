@@ -5,9 +5,10 @@ import java.time.LocalDate
 
 /** Open tasks across the whole vault, grouped by due date for the "Aufgaben" screen. */
 object Tasks {
-    private val DUE = Regex("""📅 ?(\d{4}-\d{2}-\d{2})""")
+    /** Task metadata, shared with [Reminders] and the widgets so all of them read a line the same way. */
+    val DUE = Regex("""📅 ?(\d{4}-\d{2}-\d{2})""")
     private val SCHEDULED = Regex("""⏳ ?(\d{4}-\d{2}-\d{2})""")
-    private val REMIND = Regex("""⏰ ?(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?""")
+    val REMIND = Regex("""⏰ ?(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?""")
 
     enum class Group(@StringRes val label: Int) {
         Overdue(R.string.tasks_overdue), Today(R.string.tasks_today), Soon(R.string.tasks_soon),
@@ -43,14 +44,17 @@ object Tasks {
         )
     }
 
+    /** Lines of [body] that can hold tasks: everything outside ``` code blocks. */
+    fun lines(body: String): List<String> {
+        var code = false
+        return body.lines().filter { l ->
+            if (l.trimStart().startsWith("```")) { code = !code; false } else !code
+        }
+    }
+
     /** All open tasks; lines inside ``` code blocks are skipped. */
     fun open(notes: List<Note>): List<Item> = notes.flatMap { n ->
-        var code = false
-        n.body.lines().mapNotNull { l ->
-            if (l.trimStart().startsWith("```")) { code = !code; null }
-            else if (code) null
-            else parse(n.path, l)?.takeIf { !it.done && it.text.isNotBlank() }
-        }
+        lines(n.body).mapNotNull { l -> parse(n.path, l)?.takeIf { !it.done && it.text.isNotBlank() } }
     }
 
     fun groupOf(d: LocalDate?, today: LocalDate): Group = when {

@@ -124,6 +124,7 @@
     <string name="settings_repo_url_help">HTTPS-Adresse deines Notiz-Repos, z. B. https://github.com/du/notizen.git</string>
     <string name="settings_repo_url_https">Bitte die HTTPS-Adresse (https://…) verwenden; SSH-Adressen (git@…) funktionieren in der App nicht.</string>
     <string name="settings_repo_url_is_app">Das ist die KYN-App selbst. Trag das Repo mit deinen Notizen ein.</string>
+    <string name="settings_repo_url_credentials">Den Token nicht in die Adresse schreiben (kein user:token@); er gehört ins Token-Feld darunter.</string>
     <string name="settings_token_help">Fine-grained Token nur für dieses Repo, Berechtigung „Contents: Read and write“.</string>
     <string name="settings_commit_help">Optional. Erscheint als Autor der Commits von diesem Handy.</string>
     <string name="settings_missing">Es fehlt noch: %1$s</string>

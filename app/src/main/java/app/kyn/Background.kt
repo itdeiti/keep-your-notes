@@ -43,6 +43,7 @@ class App : Application() {
         super.onCreate()
         // JGit looks for ~/.gitconfig; Android has no home directory.
         System.setProperty("user.home", filesDir.absolutePath)
+        GitSync.userDefaults()
         ThemeMode.apply(this)
         FontSize.load(this)
         Reminders.createChannel(this)
@@ -156,7 +157,7 @@ class NotesWidget : AppWidgetProvider() {
                 if (openOnly && m.groupValues[2] != " ") continue
                 flush()
                 val text = Markdown.render(Markdown.stripTaskMeta(line.substring(m.value.length)), plain, false).text
-                val due = Regex("""📅 ?(\d{4}-\d{2}-\d{2})""").find(line)
+                val due = Tasks.DUE.find(line)
                     ?.let { runCatching { "  ·  " + Dates.dayMonth(ctx, java.time.LocalDate.parse(it.groupValues[1])) }.getOrNull() } ?: ""
                 out += Row.Task(line, text + due, m.groupValues[2] != " ")
                 shown++
@@ -175,15 +176,17 @@ class NotesWidget : AppWidgetProvider() {
         }
 
         private fun update(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-            val all = if (Vault.accessible(ctx)) Vault.all(ctx)
+            // a PIN hides the notes from whoever holds the unlocked phone: the home screen too
+            val locked = AppLock.enabled(ctx)
+            val all = if (!locked && Vault.accessible(ctx)) Vault.all(ctx)
                 .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified }) else emptyList()
             for (id in ids) {
                 val f = WidgetFilter.load(ctx, id)
-                runCatching { mgr.updateAppWidget(id, views(ctx, id, f, f.apply(all).take(30))) }
+                runCatching { mgr.updateAppWidget(id, views(ctx, f, f.apply(all).take(30), locked)) }
             }
         }
 
-        private fun views(ctx: Context, id: Int, f: WidgetFilter, notes: List<Note>): RemoteViews {
+        private fun views(ctx: Context, f: WidgetFilter, notes: List<Note>, locked: Boolean): RemoteViews {
             val px = ctx.resources.displayMetrics.density
             val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(3)
             for (n in notes) {
@@ -230,8 +233,11 @@ class NotesWidget : AppWidgetProvider() {
             v.setTextViewText(
                 R.id.wl_empty,
                 ctx.getString(
-                    if (f.restricted || f.content != WidgetFilter.Content.All) R.string.widget_list_empty_filtered
-                    else R.string.widget_list_empty,
+                    when {
+                        locked -> R.string.widget_locked
+                        f.restricted || f.content != WidgetFilter.Content.All -> R.string.widget_list_empty_filtered
+                        else -> R.string.widget_list_empty
+                    },
                 ),
             )
             v.setPendingIntentTemplate(

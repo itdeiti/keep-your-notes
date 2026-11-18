@@ -44,10 +44,11 @@ class TasksWidget : AppWidgetProvider() {
         }
 
         private fun update(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-            val all = if (Vault.accessible(ctx)) Vault.all(ctx) else emptyList()
+            val locked = AppLock.enabled(ctx) // see NotesWidget: no task texts on the home screen behind a PIN
+            val all = if (!locked && Vault.accessible(ctx)) Vault.all(ctx) else emptyList()
             for (id in ids) {
                 val f = WidgetFilter.load(ctx, id)
-                runCatching { mgr.updateAppWidget(id, views(ctx, f, Tasks.open(f.apply(all)).take(MAX_TASKS))) }
+                runCatching { mgr.updateAppWidget(id, views(ctx, f, Tasks.open(f.apply(all)).take(MAX_TASKS), locked)) }
             }
         }
 
@@ -60,7 +61,7 @@ class TasksWidget : AppWidgetProvider() {
             "📄 " + titleOf(t.path),
         ).joinToString("  ·  ")
 
-        private fun views(ctx: Context, f: WidgetFilter, tasks: List<Tasks.Item>): RemoteViews {
+        private fun views(ctx: Context, f: WidgetFilter, tasks: List<Tasks.Item>, locked: Boolean): RemoteViews {
             val today = LocalDate.now()
             val px = ctx.resources.displayMetrics.density
             val fg = ctx.getColor(R.color.widget_item_fg)
@@ -107,7 +108,13 @@ class TasksWidget : AppWidgetProvider() {
             v.setTextViewText(R.id.wt_title, f.title.ifBlank { ctx.getString(R.string.widget_tasks_title) })
             v.setTextViewText(
                 R.id.wt_empty,
-                ctx.getString(if (f.restricted) R.string.widget_tasks_empty_filtered else R.string.widget_tasks_empty),
+                ctx.getString(
+                    when {
+                        locked -> R.string.widget_locked
+                        f.restricted -> R.string.widget_tasks_empty_filtered
+                        else -> R.string.widget_tasks_empty
+                    },
+                ),
             )
             v.setPendingIntentTemplate(
                 R.id.wt_items,

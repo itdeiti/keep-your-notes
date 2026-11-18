@@ -52,6 +52,10 @@ fun filterNotes(notes: List<Note>, tag: String?, query: String, folder: String? 
     }.sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified })
 }
 
+/** All tags of [notes] with how many notes use them, most used first. */
+fun countTags(notes: List<Note>): List<Pair<String, Int>> = notes.flatMap { it.tags }.groupingBy { it }.eachCount()
+    .entries.sortedByDescending { it.value }.map { it.key to it.value }
+
 /** One frontmatter property for display/editing; lists are shown comma-separated. */
 data class Prop(val key: String, val value: String, val list: Boolean)
 
@@ -132,9 +136,21 @@ object Vault {
 
     @Suppress("DEPRECATION")
     fun dirFor(ctx: Context, storage: Storage, folder: String): File = when (storage) {
-        Storage.Shared -> File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), folder)
+        Storage.Shared -> File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+            sharedFolder(folder, Prefs.defaultFolder(ctx)),
+        )
         Storage.Private -> File(ctx.filesDir, "vault")
     }
+
+    /**
+     * The vault folder below Documents: never Documents itself or anything outside it ("." / ".." / "/x"),
+     * since moving the vault deletes the old folder with everything in it.
+     */
+    internal fun sharedFolder(folder: String, default: String) = cleanFolder(folder).ifEmpty { default }
+
+    /** A symlink in the vault (e.g. from a cloned repository) must not lead reads or writes elsewhere. */
+    internal fun isLink(f: File) = java.nio.file.Files.isSymbolicLink(f.toPath())
 
     /** Can the app read and write the vault location (shared storage needs "all files" access)? */
     fun accessible(ctx: Context) = Prefs.load(ctx).storage == Storage.Private || Environment.isExternalStorageManager()
@@ -187,8 +203,8 @@ object Vault {
         val root = dir(ctx)
         if (!root.isDirectory) return emptyList()
         return root.walkTopDown()
-            .onEnter { it == root || !hidden(root, it) }
-            .filter { it.isFile && it.extension == "md" }
+            .onEnter { it == root || (!hidden(root, it) && !isLink(it)) }
+            .filter { it.isFile && it.extension == "md" && !isLink(it) }
             .mapNotNull { runCatching { read(root, it) }.getOrNull() }
             .toList()
     }
@@ -198,7 +214,7 @@ object Vault {
     /** All folders below the vault root (no dot folders), PARA folders first, subfolders after their parent. */
     fun folders(root: File): List<String> {
         if (!root.isDirectory) return emptyList()
-        val all = root.walkTopDown().onEnter { it == root || !hidden(root, it) }
+        val all = root.walkTopDown().onEnter { it == root || (!hidden(root, it) && !isLink(it)) }
             .filter { it.isDirectory && it != root }.map { it.relativeTo(root).path }.toList()
         return sortFolders(all + PARA.filter { it !in all })
     }
@@ -262,6 +278,7 @@ object Vault {
 
     fun write(root: File, path: String, front: List<String>, body: String) {
         val f = File(root, path)
+        if (isLink(f)) error("Not writing through a symlink: $path")
         f.parentFile?.mkdirs()
         f.writeText(serialize(front, body))
     }

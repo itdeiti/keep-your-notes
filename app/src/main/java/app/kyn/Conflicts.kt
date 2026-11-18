@@ -60,6 +60,7 @@ object Conflicts {
             .setStyle(NotificationCompat.BigTextStyle().bigText(ctx.getString(R.string.conflict_big, names.joinToString())))
             .setContentIntent(open)
             .setAutoCancel(true)
+            .let { AppLock.hideOnLockScreen(ctx, it, CHANNEL, ctx.getString(R.string.conflict_text)) }
             .build()
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
             try { NotificationManagerCompat.from(ctx).notify(NOTIF_ID, n) } catch (_: SecurityException) {}

@@ -5,6 +5,7 @@ import android.os.SystemClock
 import android.util.Base64
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.core.app.NotificationCompat
 import androidx.compose.foundation.background
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,6 +105,16 @@ object AppLock {
                 .apply()
         }
         return ok
+    }
+
+    /**
+     * While a PIN is set, the lock screen shows only [publicTitle], not the task or note names.
+     * The full notification stays visible once the phone is unlocked.
+     */
+    fun hideOnLockScreen(ctx: Context, b: NotificationCompat.Builder, channel: String, publicTitle: String): NotificationCompat.Builder {
+        if (!enabled(ctx)) return b
+        val public = NotificationCompat.Builder(ctx, channel).setSmallIcon(R.drawable.ic_notif).setContentTitle(publicTitle).build()
+        return b.setVisibility(NotificationCompat.VISIBILITY_PRIVATE).setPublicVersion(public)
     }
 
     fun unlock(ctx: Context, pin: String): Boolean = check(ctx, pin).also { if (it) locked = false }

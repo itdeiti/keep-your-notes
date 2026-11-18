@@ -28,7 +28,6 @@ object Markdown {
     val LIST = Regex("""^(\s*)([-*+] \[[ xX]\] |[-*+] |\d+[.)] )""")
     private val PREFIX = Regex("""^(\s*)(#{1,6} |[-*+] \[[ xX]\] |[-*+] |\d+[.)] )?""")
     private val META_STRIP = Regex("""\s*(📅|⏰|✅|⏳|🛫|➕) ?\d{4}-\d{2}-\d{2}( \d{1,2}:\d{2})?""")
-    private val DUE = Regex("""📅 ?(\d{4}-\d{2}-\d{2})""")
 
     private enum class K { BOLD, STRIKE, ITALIC, CODE, IMAGE, LINK, WIKI, URL, TAG, META }
 
@@ -68,7 +67,7 @@ object Markdown {
     /** Earliest due date of an open task. */
     fun nextDue(body: String): LocalDate? = body.lineSequence()
         .filter { TASK.find(it)?.groupValues?.get(2) == " " }
-        .mapNotNull { DUE.find(it)?.groupValues?.get(1) }
+        .mapNotNull { Tasks.DUE.find(it)?.groupValues?.get(1) }
         .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
         .minOrNull()
 

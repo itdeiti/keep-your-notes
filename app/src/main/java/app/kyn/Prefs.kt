@@ -48,7 +48,7 @@ data class Prefs(
         fun save(ctx: Context, p: Prefs) {
             sp(ctx).edit()
                 .putString("repoUrl", p.repoUrl.trim())
-                .putString("folder", p.folder.trim().ifBlank { defaultFolder(ctx) })
+                .putString("folder", Vault.sharedFolder(p.folder, defaultFolder(ctx)))
                 .putString("name", p.name.trim())
                 .putString("email", p.email.trim())
                 .putString("defaultTime", p.defaultTime.trim())

@@ -184,7 +184,7 @@ private fun WidgetConfigScreen(
     var f by remember { mutableStateOf(start) }
     var search by remember { mutableStateOf("") }
     val tags = remember(notes) {
-        notes.flatMap { it.tags }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.map { it.key }
+        countTags(notes).map { it.first }
     }
     val hasRoot = remember(notes) { notes.any { it.folder.isEmpty() } }
     val folderChoices = (if (hasRoot) listOf(WidgetFilter.ROOT) else emptyList()) + folders

@@ -83,18 +83,26 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     fun moveFolder(src: String, parent: String): Boolean {
         val target = Vault.moveFolder(Vault.dir(ctx), src, parent) ?: return false
         if (folderFilter == src) folderFilter = target
-        viewModelScope.launch {
-            GitSync.commit(ctx, ctx.getString(R.string.commit_folder_moved, src, target))
-            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
-            SyncWorker.enqueue(ctx)
-            reload()
-        }
+        afterChange(ctx.getString(R.string.commit_folder_moved, src, target)) { reload() }
         return true
     }
 
+    /**
+     * After the vault changed on disk: commit locally, refresh alarms and widgets, push in the background.
+     * [then] runs on the main thread when that is done.
+     */
+    private fun afterChange(message: String, then: () -> Unit = {}) {
+        viewModelScope.launch { afterChangeNow(message); then() }
+    }
+
+    private suspend fun afterChangeNow(message: String) {
+        GitSync.commit(ctx, message)
+        withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
+        SyncWorker.enqueue(ctx)
+    }
+
     /** All tags with how many notes use them, most used first. */
-    fun tagCounts(): List<Pair<String, Int>> = notes.flatMap { it.tags }.groupingBy { it }.eachCount()
-        .entries.sortedByDescending { it.value }.map { it.key to it.value }
+    fun tagCounts(): List<Pair<String, Int>> = countTags(notes)
 
     fun reload() {
         viewModelScope.launch {
@@ -343,12 +351,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         edPath = path
         edTitle = titleOf(path)
         edSaved = snapshot()
-        val msg = ctx.getString(R.string.commit_note, titleOf(path))
-        viewModelScope.launch {
-            GitSync.commit(ctx, msg)
-            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
-            SyncWorker.enqueue(ctx)
-        }
+        afterChange(ctx.getString(R.string.commit_note, titleOf(path)))
     }
 
     /** Shared text or link → Markdown note in Clippings/. A bare link loads the whole page. */
@@ -378,8 +381,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
                     } else { // user left meanwhile: save straight to disk
                         val root = Vault.dir(ctx)
                         Vault.write(root, Vault.uniquePath(root, Clipper.FOLDER, c.title), listOf("created: ${Vault.nowIso()}") + c.front, c.body)
-                        GitSync.commit(ctx, ctx.getString(R.string.commit_clip, c.title))
-                        SyncWorker.enqueue(ctx)
+                        afterChangeNow(ctx.getString(R.string.commit_clip, c.title))
                         reload()
                     }
                 }
@@ -414,14 +416,11 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         val root = Vault.dir(ctx)
         val ok = if (keep) Conflicts.keepCopy(root, copy) != null else Conflicts.discardCopy(root, copy)
         if (!ok) return
-        val msg = ctx.getString(
-            if (keep) R.string.commit_conflict_resolved_phone else R.string.commit_conflict_resolved_server, titleOf(orig),
+        afterChange(
+            ctx.getString(
+                if (keep) R.string.commit_conflict_resolved_phone else R.string.commit_conflict_resolved_server, titleOf(orig),
+            ),
         )
-        viewModelScope.launch {
-            GitSync.commit(ctx, msg)
-            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
-            SyncWorker.enqueue(ctx)
-        }
         edPath = null
         if (File(root, orig).exists()) openPath(orig) else { screen = returnTo; reload() }
         if (conflictCount <= 1) showConflicts = false
@@ -433,11 +432,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         screen = returnTo
         if (path != null) {
             File(Vault.dir(ctx), path).delete()
-            viewModelScope.launch {
-                GitSync.commit(ctx, ctx.getString(R.string.commit_deleted, titleOf(path)))
-                withContext(Dispatchers.IO) { Reminders.rescan(ctx) }
-                SyncWorker.enqueue(ctx)
-            }
+            afterChange(ctx.getString(R.string.commit_deleted, titleOf(path)))
         }
         reload()
     }
@@ -455,8 +450,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     val edTags: List<String> get() = frontTags(edFront).toList()
 
     /** All tags in the vault, most used first (frontmatter and #tags in text). */
-    fun allTags(): List<String> = notes.flatMap { it.tags }.groupingBy { it }.eachCount()
-        .entries.sortedByDescending { it.value }.map { it.key }
+    fun allTags(): List<String> = tagCounts().map { it.first }
 
     fun addTag(raw: String) {
         val t = cleanTag(raw)
@@ -498,12 +492,7 @@ class AppVM(app: Application) : AndroidViewModel(app) {
         if (!File(root, old).renameTo(File(root, np))) return
         edPath = np
         edSaved = snapshot()
-        val msg = ctx.getString(R.string.commit_moved, titleOf(np), f.ifEmpty { "/" })
-        viewModelScope.launch {
-            GitSync.commit(ctx, msg)
-            withContext(Dispatchers.IO) { Reminders.rescan(ctx); NotesWidget.refresh(ctx) }
-            SyncWorker.enqueue(ctx)
-        }
+        afterChange(ctx.getString(R.string.commit_moved, titleOf(np), f.ifEmpty { "/" }))
     }
 
     fun togglePin() {

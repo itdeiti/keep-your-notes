@@ -140,6 +140,7 @@
     <string name="settings_repo_url_help">HTTPS address of your notes repository, e.g. https://github.com/you/notes.git</string>
     <string name="settings_repo_url_https">Use the HTTPS address (https://…); SSH addresses (git@…) do not work in the app.</string>
     <string name="settings_repo_url_is_app">This is the KYN app itself. Enter the repository with your notes.</string>
+    <string name="settings_repo_url_credentials">Leave the token out of the address (no user:token@); enter it in the token field below.</string>
     <string name="settings_token_help">Fine-grained token for this repository only, permission \"Contents: Read and write\".</string>
     <string name="settings_commit_help">Optional. Shown as the author of commits from this phone.</string>
     <string name="settings_missing">Still missing: %1$s</string>

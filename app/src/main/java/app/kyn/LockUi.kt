@@ -220,6 +220,7 @@ private fun PinDialog(mode: PinMode, onDone: () -> Unit) {
             val ok = withContext(Dispatchers.Default) {
                 if (needOld && !AppLock.check(ctx, old)) return@withContext false
                 if (needNew) AppLock.setPin(ctx, new1) else AppLock.clear(ctx)
+                runCatching { NotesWidget.refresh(ctx.applicationContext) } // widgets hide or show content
                 true
             }
             working = false

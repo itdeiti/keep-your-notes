@@ -1075,6 +1075,8 @@ private fun repoUrlProblem(raw: String): Int? = raw.trim().let { url -> when {
     url.isBlank() -> null
     // JGit here has no SSH keys; https (or http/git for own servers) works
     url.startsWith("git@") || url.startsWith("ssh://") -> R.string.settings_repo_url_https
+    // a token in the URL would end up in .git/config (readable by other apps in shared storage)
+    GitSync.withoutCredentials(url) != url -> R.string.settings_repo_url_credentials
     Regex("""github\.com/[^/]+/(keep-your-notes|kyn|notizen-app)(\.git)?/?$""", RegexOption.IGNORE_CASE).containsMatchIn(url) ->
         R.string.settings_repo_url_is_app
     else -> null

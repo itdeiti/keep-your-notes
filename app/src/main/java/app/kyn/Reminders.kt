@@ -26,8 +26,6 @@ import java.time.ZoneId
 object Reminders {
     private const val CHANNEL = "reminders"
     private val OPEN = Regex("""^\s*[-*+] \[ \] (.*)$""")
-    private val REMIND = Regex("""⏰ ?(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?""")
-    private val DUE = Regex("""📅 ?(\d{4}-\d{2}-\d{2})""")
 
     data class Task(val path: String, val line: String, val text: String, val at: Long) {
         val id get() = "$path|$line".hashCode()
@@ -40,13 +38,14 @@ object Reminders {
 
     fun tasks(ctx: Context): List<Task> {
         val def = Prefs.load(ctx).defaultTime
-        return Vault.all(ctx).flatMap { n -> n.body.lines().mapNotNull { parse(n.path, it, def) } }
+        // same lines as the task list and widget (no code blocks), so no reminder for a task shown nowhere
+        return Vault.all(ctx).flatMap { n -> Tasks.lines(n.body).mapNotNull { parse(n.path, it, def) } }
     }
 
     internal fun parse(path: String, line: String, def: String): Task? {
         val m = OPEN.find(line) ?: return null
-        val r = REMIND.find(line)
-        val d = DUE.find(line)
+        val r = Tasks.REMIND.find(line)
+        val d = Tasks.DUE.find(line)
         val (date, time) = when {
             r != null -> r.groupValues[1] to r.groupValues[2].ifEmpty { def }
             d != null -> d.groupValues[1] to def
@@ -101,6 +100,7 @@ object Reminders {
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .addAction(0, ctx.getString(R.string.reminder_done), done)
+            .let { AppLock.hideOnLockScreen(ctx, it, CHANNEL, ctx.getString(R.string.reminder_due)) }
             .build()
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
             try { NotificationManagerCompat.from(ctx).notify(id, n) } catch (_: SecurityException) {}
@@ -112,14 +112,19 @@ object Reminders {
 
     /** Tick or untick the task [line] in [path], commit, push later, refresh alarms and widget. */
     suspend fun toggle(ctx: Context, path: String, line: String, onlyOpen: Boolean = false) {
-        val f = Vault.safeFile(Vault.dir(ctx), path) ?: return
-        if (!f.exists()) return
-        val text = f.readText()
-        val idx = text.split("\n").indexOfFirst { it.trimEnd('\r') == line }
-        if (idx < 0) return
         val open = Markdown.TASK.find(line)?.groupValues?.get(2) == " "
         if (onlyOpen && !open) return
-        f.writeText(Markdown.toggleTaskLine(text, idx))
+        // under the git lock: a running sync (merge, conflict copies) must not overwrite the tick
+        val written = GitSync.exclusive {
+            val f = Vault.safeFile(Vault.dir(ctx), path) ?: return@exclusive false
+            if (!f.exists()) return@exclusive false
+            val text = f.readText()
+            val idx = text.split("\n").indexOfFirst { it.trimEnd('\r') == line }
+            if (idx < 0) return@exclusive false
+            f.writeText(Markdown.toggleTaskLine(text, idx))
+            true
+        }
+        if (!written) return
         // widgets and alarms first, so the tick shows right away; the commit may wait for a running sync
         runCatching { NotesWidget.refresh(ctx) }
         runCatching { rescan(ctx) }

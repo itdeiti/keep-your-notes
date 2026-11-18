@@ -15,9 +15,11 @@ import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.lib.RepositoryCache
 import org.eclipse.jgit.util.FS
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.transport.CredentialItem
 import org.eclipse.jgit.transport.CredentialsProvider
 import org.eclipse.jgit.transport.RefSpec
 import org.eclipse.jgit.transport.RemoteRefUpdate
+import org.eclipse.jgit.transport.URIish
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
 import org.eclipse.jgit.treewalk.TreeWalk
 import java.io.File
@@ -76,8 +78,34 @@ object GitSync {
         return n
     }
 
-    private fun creds(ctx: Context) =
-        UsernamePasswordCredentialsProvider("x-access-token", Secrets.get(ctx) ?: "")
+    private fun creds(ctx: Context): CredentialsProvider =
+        HostCredentials(hostOf(Prefs.load(ctx).repoUrl), Secrets.get(ctx) ?: "")
+
+    internal fun hostOf(url: String): String? = runCatching { URIish(url.trim()).host }.getOrNull()?.lowercase()
+
+    /**
+     * The token goes only to the host of the configured repository URL. A redirected push or fetch
+     * (pushurl, insteadOf, a changed .git/config in shared storage) gets no credentials.
+     */
+    internal class HostCredentials(private val host: String?, token: String) :
+        UsernamePasswordCredentialsProvider("x-access-token", token) {
+        override fun get(uri: URIish?, vararg items: CredentialItem?): Boolean {
+            if (host == null || uri?.host?.lowercase() != host) return false
+            return super.get(uri, *items)
+        }
+    }
+
+    /**
+     * In shared storage any app with "all files" access can edit .git/config. Only the settings decide
+     * where git talks to: no push URL, no URL rewriting, no proxy or extra headers.
+     */
+    internal fun pinRemote(config: org.eclipse.jgit.lib.StoredConfig, url: String) {
+        if (url.isNotBlank()) config.setString("remote", "origin", "url", url)
+        config.unset("remote", "origin", "pushurl")
+        for (sub in config.getSubsections("url")) config.unsetSection("url", sub)
+        config.unsetSection("http", null)
+        for (sub in config.getSubsections("http")) config.unsetSection("http", sub)
+    }
 
     private fun ident(ctx: Context): PersonIdent {
         val p = Prefs.load(ctx)
@@ -94,10 +122,25 @@ object GitSync {
             setString("user", null, "name", id.name)
             setString("user", null, "email", id.emailAddress)
             // the URL from the settings wins: changing it there must reach the existing clone too
-            Prefs.load(ctx).repoUrl.takeIf { it.isNotBlank() }?.let { setString("remote", "origin", "url", it) }
+            pinRemote(this, Prefs.load(ctx).repoUrl)
             save()
         }
         return git
+    }
+
+    /**
+     * Defaults in the user-level config (~/.gitconfig = filesDir): a clone checks out the work tree
+     * before its own config can be changed, so symlinks from a repository would otherwise be created
+     * in app-private storage and could point at the app's own files.
+     */
+    fun userDefaults() {
+        runCatching {
+            org.eclipse.jgit.util.SystemReader.getInstance().userConfig.apply {
+                setBoolean("core", null, "symlinks", false)
+                setBoolean("core", null, "filemode", false)
+                save()
+            }
+        }
     }
 
     /** Run [block] while no git operation touches the vault (e.g. moving it). */
@@ -238,6 +281,9 @@ object GitSync {
         }
     }
 
+    /** "https://user:token@host/x" -> "https://host/x": nothing secret in status lines. */
+    internal fun withoutCredentials(url: String) = url.replace(Regex("""^([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@]*@"""), "$1")
+
     /** Short reason for the status line, in the app's language, plus the technical cause where it helps. */
     fun explain(ctx: Context, e: Throwable): String {
         val chain = generateSequence(e) { it.cause }.toList()
@@ -252,7 +298,7 @@ object GitSync {
             Regex("UnknownHost|Unable to resolve host|timed out|Network is unreachable", RegexOption.IGNORE_CASE)
                 .containsMatchIn(all) -> ctx.getString(R.string.err_offline)
             Regex("not found|404", RegexOption.IGNORE_CASE).containsMatchIn(all) ->
-                ctx.getString(R.string.err_repo_not_found, Prefs.load(ctx).repoUrl, raw)
+                ctx.getString(R.string.err_repo_not_found, withoutCredentials(Prefs.load(ctx).repoUrl), raw)
             else -> e.message ?: e.javaClass.simpleName
         }
     }

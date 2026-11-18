@@ -529,18 +529,7 @@ def cmd_apply(dest):
                     stats["tag_ausserhalb_liste"] += 1
         text = open(src, encoding="utf-8").read()
         front, body = split_front(text)
-        # drop old tags (inline or YAML list), write the new ones
-        out, skipping = [], False
-        for l in front:
-            if l.startswith("tags:"):
-                skipping = not l[5:].strip()
-                continue
-            if skipping and l.strip().startswith("- "):
-                continue
-            skipping = False
-            out.append(l)
-        if new_tags:
-            out.append("tags: [%s]" % ", ".join(new_tags))
+        out = set_tags(front, new_tags)  # old tags (inline or YAML list) out, the new ones in
         os.makedirs(os.path.join(dest, folder), exist_ok=True)
         target = os.path.join(dest, folder, name)
         n = 2
