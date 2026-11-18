@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -278,5 +279,72 @@ private fun SecretBlock(i: MeldCrypto.Inline, c: MdColors, onLink: (String) -> U
         text = { PasswordInput(i.hint, onSubmit = { pw -> SecretSession.unlock(blob, pw)?.also { plain = it } != null }, onDone = { ask = false }) },
         confirmButton = {},
         dismissButton = { TextButton({ ask = false }) { Text(stringResource(R.string.screens_cancel)) } },
+    )
+}
+
+/**
+ * Choose a password (typed twice) and an optional hint for encrypting a note ([inline] = false) or the
+ * selected text ([inline] = true, with the plugin's "show in reading view" choice). Inputs live in plain
+ * `remember` state and are cleared on submit. [onConfirm] gets a CharArray it wipes.
+ */
+@Composable
+internal fun NewSecretDialog(
+    inline: Boolean,
+    onConfirm: suspend (password: CharArray, hint: String, visible: Boolean) -> Boolean,
+    onDismiss: () -> Unit,
+) {
+    var pw by remember { mutableStateOf("") }
+    var pw2 by remember { mutableStateOf("") }
+    var hint by remember { mutableStateOf("") }
+    var visible by remember { mutableStateOf(true) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val mismatch = pw2.isNotEmpty() && pw != pw2
+    val hintBad = inline && ("💡" in hint || hint.any { it == '\n' || it == '\r' })
+    val ok = pw.isNotEmpty() && pw == pw2 && !hintBad && !busy
+    val pwOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false)
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(stringResource(if (inline) R.string.secret_encrypt_selection else R.string.secret_encrypt_note)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    pw, { pw = it }, label = { Text(stringResource(R.string.secret_password)) }, singleLine = true, enabled = !busy,
+                    visualTransformation = PasswordVisualTransformation(), keyboardOptions = pwOptions, modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    pw2, { pw2 = it }, label = { Text(stringResource(R.string.secret_password_repeat)) }, singleLine = true, enabled = !busy,
+                    isError = mismatch, supportingText = if (mismatch) { { Text(stringResource(R.string.secret_password_mismatch)) } } else null,
+                    visualTransformation = PasswordVisualTransformation(), keyboardOptions = pwOptions, modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    hint, { hint = it }, label = { Text(stringResource(R.string.secret_hint_label)) }, singleLine = true, enabled = !busy,
+                    isError = hintBad, supportingText = if (hintBad) { { Text(stringResource(R.string.secret_hint_invalid)) } } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (inline) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable(enabled = !busy) { visible = !visible }) {
+                    Checkbox(visible, { visible = it }, enabled = !busy)
+                    Text(stringResource(R.string.secret_visible), style = MaterialTheme.typography.bodySmall)
+                }
+                Text(
+                    stringResource(R.string.secret_no_recovery) + if (inline) "" else " " + stringResource(R.string.secret_history_warning),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary,
+                )
+                if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = ok, onClick = {
+                val p = pw.toCharArray()
+                pw = ""; pw2 = ""
+                busy = true
+                scope.launch {
+                    val done = onConfirm(p, hint, visible)
+                    busy = false
+                    if (done) onDismiss()
+                }
+            }) { Text(stringResource(R.string.secret_encrypt)) }
+        },
+        dismissButton = { TextButton(onDismiss, enabled = !busy) { Text(stringResource(R.string.screens_cancel)) } },
     )
 }

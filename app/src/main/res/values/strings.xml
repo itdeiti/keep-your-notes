@@ -105,6 +105,7 @@
     <string name="commit_merge_conflict">Merge with conflict: %1$s</string>
     <string name="commit_note">Note: %1$s</string>
     <string name="commit_clip">Clip: %1$s</string>
+    <string name="commit_encrypted">Encrypted: %1$s</string>
     <string name="commit_deleted">Deleted: %1$s</string>
     <string name="commit_moved">Moved: %1$s -> %2$s</string>
     <string name="commit_folder_moved">Folder moved: %1$s -> %2$s</string>

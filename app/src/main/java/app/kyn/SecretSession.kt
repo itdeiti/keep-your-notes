@@ -83,6 +83,23 @@ object SecretSession {
         }
     }
 
+    /**
+     * Encrypt [text] with a newly chosen [password] (v3) and keep it in the session, so the result opens
+     * without asking again. [password] is wiped.
+     */
+    suspend fun encryptNew(text: String, password: CharArray): MeldCrypto.V3 {
+        try {
+            val b = withContext(Dispatchers.Default) { MeldCrypto.encryptV3(text, password) }
+            owner[b.key] = synchronized(passwords) {
+                passwords.firstOrNull { it.contentEquals(password) } ?: password.copyOf().also { passwords += it }
+            }
+            remember(b, text)
+            return b
+        } finally {
+            password.fill('\u0000')
+        }
+    }
+
     /** Called after [lock] (main thread), e.g. to drop drafts that hold plaintext. Set by [AppVM]. */
     var onLocked: (() -> Unit)? = null
 

@@ -323,6 +323,14 @@ fun EditorScreen(vm: AppVM) {
     val focus = remember { FocusRequester() }
     var confirmDelete by remember { mutableStateOf(false) }
     var pickRecur by remember { mutableStateOf(false) }
+    var encrypt by remember { mutableStateOf<Boolean?>(null) } // false = whole note, true = selection
+    encrypt?.let { inline ->
+        NewSecretDialog(
+            inline,
+            onConfirm = { pw, hint, visible -> if (inline) vm.encryptSelection(pw, hint, visible) else vm.encryptNote(pw, hint) },
+            onDismiss = { encrypt = null },
+        )
+    }
     if (pickRecur) RecurDialog(onPick = { vm.edBody = Markdown.setRecurrence(vm.edBody, it); pickRecur = false }) { pickRecur = false }
     BackHandler { vm.closeEditor() }
 
@@ -387,6 +395,7 @@ fun EditorScreen(vm: AppVM) {
                         Text("📌", Modifier.alpha(if (vm.edPinned) 1f else 0.3f))
                     }
                     TextButton({ vm.edPreview = !vm.edPreview }) { Text(stringResource(if (vm.edPreview) R.string.editor_edit else R.string.editor_view)) }
+                    if (vm.edPath != null || vm.edBody.text.isNotBlank()) TextButton({ encrypt = false }) { Text("🔐") }
                     IconButton({ confirmDelete = true }) { Icon(Icons.Default.Delete, stringResource(R.string.screens_delete)) }
                 },
             )
@@ -478,6 +487,10 @@ fun EditorScreen(vm: AppVM) {
                     Tool("•") { vm.edBody = Markdown.toggleBullet(vm.edBody) }
                     Tool("🔗") { vm.edBody = Markdown.link(vm.edBody) }
                     Tool("▦") { vm.edBody = Markdown.table(vm.edBody, ctx.getString(R.string.md_table_column)) }
+                    Tool("🔐") {
+                        if (vm.edBody.selection.collapsed) Toast.makeText(ctx, ctx.getString(R.string.secret_select_first), Toast.LENGTH_SHORT).show()
+                        else encrypt = true
+                    }
                 }
             }
         }
