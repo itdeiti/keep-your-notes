@@ -6,3 +6,8 @@ local.properties
 .kotlin/
 .DS_Store
 apk/
+__pycache__/
+*.pyc
+keystore.properties
+*.p12
+*.jks
