@@ -173,4 +173,17 @@
     <string name="secret_inline_locked">Encrypted section · tap to unlock</string>
     <string name="secret_inline_title">Encrypted section</string>
     <string name="secret_inline_unsupported">🔐 Old format, open in Obsidian to update it</string>
+    <string name="reclone_button">Clone vault again</string>
+    <string name="reclone_help">Replaces the vault on this phone with a fresh copy of the server, including its history. Needed after the server history was rewritten or the repository changed.</string>
+    <string name="reclone_title">Clone vault again?</string>
+    <string name="reclone_checking">Comparing with the server …</string>
+    <string name="reclone_failed">Could not reach the server, nothing was changed: %1$s</string>
+    <string name="reclone_clean">The phone has nothing the server does not have. The local vault and its history are replaced by a fresh clone.</string>
+    <plurals name="reclone_changes">
+        <item quantity="one">%d file on the phone differs from the server and will be lost:</item>
+        <item quantity="other">%d files on the phone differ from the server and will be lost:</item>
+    </plurals>
+    <string name="reclone_confirm">Clone again</string>
+    <string name="reclone_confirm_lose">Discard and clone</string>
+    <string name="reclone_done">Vault cloned again.</string>
 </resources>

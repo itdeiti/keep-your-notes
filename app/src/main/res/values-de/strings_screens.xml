@@ -157,4 +157,17 @@
     <string name="secret_inline_locked">Verschlüsselter Abschnitt · tippen zum Entsperren</string>
     <string name="secret_inline_title">Verschlüsselter Abschnitt</string>
     <string name="secret_inline_unsupported">🔐 Altes Format, in Obsidian öffnen zum Aktualisieren</string>
+    <string name="reclone_button">Vault neu klonen</string>
+    <string name="reclone_help">Ersetzt den Vault auf dem Handy durch eine frische Kopie vom Server, samt Historie. Nötig, wenn die Server-Historie neu geschrieben oder das Repo gewechselt wurde.</string>
+    <string name="reclone_title">Vault neu klonen?</string>
+    <string name="reclone_checking">Vergleiche mit dem Server …</string>
+    <string name="reclone_failed">Server nicht erreichbar, nichts wurde geändert: %1$s</string>
+    <string name="reclone_clean">Auf dem Handy ist nichts, was nicht auch auf dem Server ist. Der lokale Vault samt Historie wird durch einen frischen Klon ersetzt.</string>
+    <plurals name="reclone_changes">
+        <item quantity="one">%d Datei auf dem Handy weicht vom Server ab und geht verloren:</item>
+        <item quantity="other">%d Dateien auf dem Handy weichen vom Server ab und gehen verloren:</item>
+    </plurals>
+    <string name="reclone_confirm">Neu klonen</string>
+    <string name="reclone_confirm_lose">Verwerfen und klonen</string>
+    <string name="reclone_done">Vault neu geklont.</string>
 </resources>
