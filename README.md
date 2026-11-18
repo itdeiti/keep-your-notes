@@ -23,6 +23,7 @@ Quick capture like Keep, but no cloud account and no lock-in: notes are plain `.
 - **Configurable widgets** – a note list and a task list (grouped by due date), each limited to (or hiding) any mix of folders, tags and single notes; tick tasks right on the home screen.
 - **Web clipping** – shared pages are reduced to the article (Firefox reader mode) and converted to Markdown, like the Obsidian Web Clipper.
 - **Git sync that survives conflicts** – every save is a commit (works offline), push when online, pull on start and every 3 hours; a conflict never loses text but leaves a visible conflict copy.
+- **Encrypted notes** – reads, edits and creates notes encrypted with the Obsidian plugin [Meld Encrypt](https://github.com/meld-cp/obsidian-encrypt): whole notes (`.mdenc`) and encrypted sections inside a note. Plaintext never touches the disk, see [Encrypted notes](#encrypted-notes-meld-encrypt).
 - **Privacy** – PIN lock, no recent-apps preview, vault either shared with Obsidian on the phone or private to the app, no analytics, no backend besides your Git host.
 - **Properties and tags** – edit frontmatter fields (with date picker) and tags in the app; Obsidian sees the same properties.
 - **Light/dark, text size and language** – follow the device or set per app (English, German; more via [Translations](#translations)).
@@ -102,6 +103,17 @@ Clips go to `Clippings/` with `source:` in the frontmatter.
 </details>
 
 <details>
+<summary><b>Encrypted notes (Meld Encrypt)</b></summary>
+
+- **Whole note** (`.mdenc`): listed by name only. Tap it, enter the password, read it; "Edit" changes it, "Done" encrypts and saves again with the same password and hint.
+- **Encrypted section** (`🔐γ …` inside a normal note): the read view shows a locked box; tap to unlock, "Edit" in the box changes the text. In the editor the section stays ciphertext.
+- **Encrypt in the app**: 🔐 in the editor's top bar turns the whole note into `<name>.mdenc` (like "Encrypt note" in the plugin, frontmatter included). 🔐 in the toolbar encrypts the selected text as a section (like "Encrypt selection").
+- **Session**: a password that worked opens other notes without asking again until you tap "Lock", the PIN lock engages, or the app was in the background longer than the PIN delay (default 60 s).
+- **Formats**: v3 (plugin 3.x, read and write) and v2 (read; editing upgrades it to v3). Older formats show a hint to open the note in Obsidian once, which upgrades it.
+
+</details>
+
+<details>
 <summary><b>Folders and conflicts</b></summary>
 
 - 📁 in the list opens all folders with note counts; tap filters (subfolders included), "Move" moves a folder with everything in it.
@@ -118,6 +130,21 @@ Clips go to `Clippings/` with `source:` in the frontmatter.
 - **Token**: stored encrypted with a key in the Android Keystore. Use a fine-grained token limited to the vault repo.
 - No analytics, no ads, no server of its own. Network access only for Git and for downloading pages you share.
 
+### Encrypted notes (Meld Encrypt)
+
+Encryption is compatible with the plugin: PBKDF2-HMAC-SHA512 (220,000 iterations) and AES-256-GCM, done on the phone. Your Git host only gets ciphertext. In the app, decrypted text lives in memory only: it is never written to the vault, to settings or to saved app state. Search, tags, the task list, reminders and widgets never see it, and screenshots are blocked while anything is unlocked.
+
+> [!WARNING]
+> **Read this before you rely on it.**
+> - **No password, no note.** There is no recovery and no backdoor. Keep the password in a password manager.
+> - **Use a strong password.** The encrypted files sit in your repo, so anyone with access to it can try passwords offline as long as they like. A short or reused password can be guessed despite the slow key derivation.
+> - **Git keeps the past.** Encrypting a note that was already committed leaves the earlier plaintext versions in the Git history (and on your Git host). Create secret notes encrypted from the start, or rewrite the history afterwards (`git filter-repo`) or move to a fresh repo.
+> - **Not everything is encrypted.** File and folder names, the hint, file sizes, change times and commit messages (they contain the note title) stay readable. Use neutral file names and a hint that does not give the password away.
+> - **Tasks inside encrypted content are invisible** to the task list, reminders, widgets and search. That is on purpose, so do not put tasks there that need a reminder.
+> - **While unlocked, the content is on screen and in memory.** Lock (top bar) when you hand over the phone; set a PIN so the session also ends when the app locks. Text you copy from an encrypted note lands on the normal clipboard.
+> - **Concurrent edits** of the same encrypted note on phone and desktop produce an encrypted conflict copy. Resolve it in Obsidian (the app shows it in the list but has no conflict banner for encrypted notes yet).
+> - **Back up.** A note encrypted in the app replaces the `.md`. Make sure your vault repo is pushed and backed up before encrypting important notes.
+
 Found a security issue? Please open a [private security advisory](https://github.com/itdeiti/keep-your-notes/security/advisories/new) instead of a public issue.
 
 ## Desktop with Obsidian
@@ -130,6 +157,7 @@ git clone git@github.com:<you>/vault.git ~/vault
 2. Settings → Community plugins: install and enable **Git** (Vinzent03); auto commit-and-sync every 5 minutes, pull on startup.
 3. If your SSH key has a passphrase, store it in the macOS keychain (`ssh-add --apple-use-keychain ~/.ssh/<key>` and `UseKeychain yes` in `~/.ssh/config`); Obsidian cannot ask for it.
 4. Optional plugins that understand the same task format: **Tasks** and **Reminder**.
+5. Optional: **Meld Encrypt** for encrypted notes; the app reads and writes the same format, see [Encrypted notes](#encrypted-notes-meld-encrypt).
 
 `.obsidian/` is committed on purpose; ignore only `.obsidian/workspace*.json` and `.trash/` (the app writes this `.gitignore` when it clones an empty repo).
 
