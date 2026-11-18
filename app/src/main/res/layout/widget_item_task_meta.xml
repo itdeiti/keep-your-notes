@@ -1,0 +1,45 @@
+<!-- Task list widget row: task text (up to two lines) and, always visible below it, due date, recurrence and note. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/wc_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="32dp"
+    android:orientation="horizontal"
+    android:paddingStart="2dp"
+    android:paddingEnd="12dp">
+
+    <CheckBox
+        android:id="@+id/wc_check"
+        android:layout_width="40dp"
+        android:layout_height="32dp"
+        android:buttonTint="@color/widget_item_fg" />
+
+    <LinearLayout
+        android:id="@+id/wc_body"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/wc_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:textColor="@color/widget_item_fg"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/wc_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_item_fg"
+            android:textSize="11sp" />
+    </LinearLayout>
+</LinearLayout>

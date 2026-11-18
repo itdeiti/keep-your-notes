@@ -6,11 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Paint
-import android.text.SpannableStringBuilder
-import android.text.Spanned
-import android.text.style.ForegroundColorSpan
-import android.text.style.RelativeSizeSpan
 import android.widget.RemoteViews
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -18,7 +13,7 @@ import java.time.LocalTime
 
 /**
  * Task list widget: every open task of the vault (or of the folders, tags and notes chosen in its
- * settings), grouped like the task overview and sorted by due date. The checkbox ticks the task
+ * settings), grouped like the task overview (group order set in its settings) and sorted by due date. The checkbox ticks the task
  * without opening the app, the text opens the note, ＋ opens the quick task dialog.
  */
 class TasksWidget : AppWidgetProvider() {
@@ -48,15 +43,16 @@ class TasksWidget : AppWidgetProvider() {
             for (id in ids) {
                 val f = WidgetFilter.load(ctx, id)
                 val locked = WidgetFilter.hidden(ctx, id)
-                val tasks = if (locked) emptyList() else Tasks.open(f.apply(all)).take(MAX_TASKS)
+                val tasks = if (locked) emptyList() else f.tasks(all).take(MAX_TASKS)
                 runCatching { mgr.updateAppWidget(id, views(ctx, f, tasks, locked)) }
             }
         }
 
-        /** "18.11. 09:00 · 🔁 weekly · 📄 Aufgaben" – due date (or reminder), recurrence and the note it is in. */
+        /** "📅 18.11. ⏰ 09:00  ·  🔁 weekly  ·  📄 Aufgaben" – due date, reminder time, recurrence and the note it is in. */
         private fun meta(ctx: Context, t: Tasks.Item): String = listOfNotNull(
             t.date?.let { d ->
-                Dates.dayMonth(ctx, d) + (t.time?.let { " " + (runCatching { Dates.time(ctx, LocalTime.parse(it.padStart(5, '0'))) }.getOrDefault(it)) } ?: "")
+                "📅 " + Dates.dayMonth(ctx, d) +
+                    (t.time?.let { " ⏰ " + runCatching { Dates.time(ctx, LocalTime.parse(it.padStart(5, '0'))) }.getOrDefault(it) } ?: "")
             },
             t.recur?.let { "🔁 " + it.label(ctx.resources) },
             "📄 " + titleOf(t.path),
@@ -69,7 +65,7 @@ class TasksWidget : AppWidgetProvider() {
             val dim = (fg and 0x00FFFFFF) or (0x99 shl 24)
             val red = ctx.getColor(R.color.widget_overdue)
             val items = RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(2)
-            for ((g, list) in Tasks.grouped(tasks, today)) {
+            for ((g, list) in Tasks.grouped(tasks, today, f.order.groups)) {
                 val size = list.size + 1 // header + tasks form one card
                 val head = RemoteViews(ctx.packageName, R.layout.widget_item_title).apply {
                     setTextViewText(R.id.wc_text, ctx.getString(g.label) + "  " + list.size)
@@ -78,24 +74,17 @@ class TasksWidget : AppWidgetProvider() {
                 }
                 items.addItem(("group:" + g.name).hashCode().toLong(), head)
                 list.forEachIndexed { i, t ->
-                    val text = SpannableStringBuilder(t.text)
-                    val m = meta(ctx, t)
-                    run {
-                        val start = text.length
-                        text.append("\n").append(m)
-                        val color = if (g == Tasks.Group.Overdue) red else dim
-                        text.setSpan(ForegroundColorSpan(color), start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        text.setSpan(RelativeSizeSpan(0.85f), start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    }
-                    val row = RemoteViews(ctx.packageName, R.layout.widget_item_task).apply {
+                    val row = RemoteViews(ctx.packageName, R.layout.widget_item_task_meta).apply {
+                        // own line for the date: a long task text can no longer push it out of the row
+                        setTextViewText(R.id.wc_text, t.text)
+                        setTextViewText(R.id.wc_meta, meta(ctx, t))
+                        setTextColor(R.id.wc_meta, if (g == Tasks.Group.Overdue) red else dim)
                         setCompoundButtonChecked(R.id.wc_check, false)
-                        setTextViewText(R.id.wc_text, text)
-                        setInt(R.id.wc_text, "setPaintFlags", Paint.ANTI_ALIAS_FLAG)
                         setOnCheckedChangeResponse(
                             R.id.wc_check,
                             RemoteViews.RemoteResponse.fromFillInIntent(Intent().putExtra("toggle", t.path).putExtra("line", t.line)),
                         )
-                        setOnClickFillInIntent(R.id.wc_text, Intent().putExtra("open", t.path))
+                        setOnClickFillInIntent(R.id.wc_body, Intent().putExtra("open", t.path))
                         setInt(R.id.wc_root, "setBackgroundResource", NotesWidget.bg(i + 1, size))
                         if (i == list.size - 1) // room for the gap below the card (inset in wcard_bottom)
                             setViewPadding(R.id.wc_root, (2 * px).toInt(), 0, (12 * px).toInt(), (12 * px).toInt())
