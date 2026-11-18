@@ -107,6 +107,15 @@ data class WidgetFilter(
             )
         }
 
+        /** Saved once through the (PIN-gated) settings screen: the user chose what this widget shows. */
+        fun configured(ctx: Context, id: Int) = sp(ctx).contains("content_$id")
+
+        /**
+         * Behind a PIN a widget shows only what the user picked for it in its settings.
+         * A task widget can be placed without settings; until then it stays empty.
+         */
+        fun hidden(ctx: Context, id: Int) = AppLock.enabled(ctx) && !configured(ctx, id)
+
         fun save(ctx: Context, id: Int, f: WidgetFilter) {
             sp(ctx).edit()
                 .putString("title_$id", f.title.trim())

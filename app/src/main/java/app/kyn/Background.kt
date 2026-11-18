@@ -176,13 +176,14 @@ class NotesWidget : AppWidgetProvider() {
         }
 
         private fun update(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-            // a PIN hides the notes from whoever holds the unlocked phone: the home screen too
-            val locked = AppLock.enabled(ctx)
-            val all = if (!locked && Vault.accessible(ctx)) Vault.all(ctx)
-                .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified }) else emptyList()
+            val all by lazy {
+                if (Vault.accessible(ctx)) Vault.all(ctx)
+                    .sortedWith(compareByDescending<Note> { it.pinned }.thenByDescending { it.modified }) else emptyList()
+            }
             for (id in ids) {
                 val f = WidgetFilter.load(ctx, id)
-                runCatching { mgr.updateAppWidget(id, views(ctx, f, f.apply(all).take(30), locked)) }
+                val locked = WidgetFilter.hidden(ctx, id)
+                runCatching { mgr.updateAppWidget(id, views(ctx, f, if (locked) emptyList() else f.apply(all).take(30), locked)) }
             }
         }
 

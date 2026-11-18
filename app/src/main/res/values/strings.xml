@@ -146,7 +146,7 @@
     <string name="widget_tasks_title">Tasks</string>
     <string name="widget_tasks_empty">No open tasks</string>
     <string name="widget_tasks_empty_filtered">No open tasks in this selection</string>
-    <string name="widget_locked">Locked with PIN. Open the app to see your notes.</string>
+    <string name="widget_locked">Locked with PIN. Set up this widget to choose what it shows.</string>
     <string name="widget_tasks_config_label">Set up task list</string>
     <string name="settings_font_size">Text size</string>
     <string name="font_small">Small</string>

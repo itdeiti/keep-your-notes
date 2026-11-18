@@ -44,11 +44,12 @@ class TasksWidget : AppWidgetProvider() {
         }
 
         private fun update(ctx: Context, mgr: AppWidgetManager, ids: IntArray) {
-            val locked = AppLock.enabled(ctx) // see NotesWidget: no task texts on the home screen behind a PIN
-            val all = if (!locked && Vault.accessible(ctx)) Vault.all(ctx) else emptyList()
+            val all by lazy { if (Vault.accessible(ctx)) Vault.all(ctx) else emptyList() }
             for (id in ids) {
                 val f = WidgetFilter.load(ctx, id)
-                runCatching { mgr.updateAppWidget(id, views(ctx, f, Tasks.open(f.apply(all)).take(MAX_TASKS), locked)) }
+                val locked = WidgetFilter.hidden(ctx, id)
+                val tasks = if (locked) emptyList() else Tasks.open(f.apply(all)).take(MAX_TASKS)
+                runCatching { mgr.updateAppWidget(id, views(ctx, f, tasks, locked)) }
             }
         }
 

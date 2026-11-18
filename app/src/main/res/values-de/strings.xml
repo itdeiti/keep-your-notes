@@ -127,7 +127,7 @@
     <string name="widget_tasks_title">Aufgaben</string>
     <string name="widget_tasks_empty">Keine offenen Aufgaben</string>
     <string name="widget_tasks_empty_filtered">Keine offenen Aufgaben in dieser Auswahl</string>
-    <string name="widget_locked">Mit PIN gesperrt. Öffne die App, um deine Notizen zu sehen.</string>
+    <string name="widget_locked">Mit PIN gesperrt. Richte das Widget ein, um festzulegen, was es zeigt.</string>
     <string name="widget_tasks_config_label">Aufgabenliste einrichten</string>
     <string name="settings_font_size">Schriftgröße</string>
     <string name="font_small">Klein</string>
