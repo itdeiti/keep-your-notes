@@ -24,6 +24,8 @@ class Plaintext internal constructor(val text: String) {
 object SecretSession {
     private val passwords = mutableListOf<CharArray>()
     private val cache = mutableMapOf<String, Plaintext>()
+    /** Blob key -> the (session-owned) password that opened it; re-encrypting uses the same one. */
+    private val owner = mutableMapOf<String, CharArray>()
     private var backgroundAt = 0L
 
     /** Bumped on every change, so Compose re-reads [cached] and [unlocked]. */
@@ -37,28 +39,52 @@ object SecretSession {
     /** Try the passwords of this session (off the main thread: PBKDF2 takes up to a second). */
     suspend fun tryKnown(b: MeldCrypto.Blob): Plaintext? {
         cache[b.key]?.let { return it }
-        val known = synchronized(passwords) { passwords.map { it.copyOf() } }
-        try {
-            for (p in known) {
-                val t = withContext(Dispatchers.Default) { MeldCrypto.decrypt(b, p) } ?: continue
-                return remember(b, t)
-            }
-            return null
-        } finally {
-            known.forEach { it.fill('\u0000') }
+        val known = synchronized(passwords) { passwords.toList() }
+        for (p in known) {
+            val copy = p.copyOf()
+            val t = try { withContext(Dispatchers.Default) { MeldCrypto.decrypt(b, copy) } } finally { copy.fill('\u0000') } ?: continue
+            if (synchronized(passwords) { p !in passwords }) return null // locked meanwhile
+            owner[b.key] = p
+            return remember(b, t)
         }
+        return null
     }
 
     /** Decrypt with a newly typed password; on success it is kept for this session. [password] is wiped. */
     suspend fun unlock(b: MeldCrypto.Blob, password: CharArray): Plaintext? {
         try {
             val t = withContext(Dispatchers.Default) { MeldCrypto.decrypt(b, password) } ?: return null
-            synchronized(passwords) { if (passwords.none { it.contentEquals(password) }) passwords += password.copyOf() }
+            owner[b.key] = synchronized(passwords) {
+                passwords.firstOrNull { it.contentEquals(password) } ?: password.copyOf().also { passwords += it }
+            }
             return remember(b, t)
         } finally {
             password.fill('\u0000')
         }
     }
+
+    /**
+     * Encrypt [text] with the password that opened [old] (v3, fresh salt and IV). The result is cached as
+     * decrypted, so the view shows the new text without asking again. Null if [old] was not unlocked
+     * in this session (or the session was locked meanwhile).
+     */
+    suspend fun encryptLike(old: MeldCrypto.Blob, text: String): MeldCrypto.V3? {
+        val pw = synchronized(passwords) { owner[old.key]?.takeIf { it in passwords }?.copyOf() } ?: return null
+        try {
+            val b = withContext(Dispatchers.Default) { MeldCrypto.encryptV3(text, pw) }
+            synchronized(passwords) {
+                val p = passwords.firstOrNull { it.contentEquals(pw) } ?: return null
+                owner[b.key] = p
+            }
+            remember(b, text)
+            return b
+        } finally {
+            pw.fill('\u0000')
+        }
+    }
+
+    /** Called after [lock] (main thread), e.g. to drop drafts that hold plaintext. Set by [AppVM]. */
+    var onLocked: (() -> Unit)? = null
 
     private fun remember(b: MeldCrypto.Blob, text: String): Plaintext =
         Plaintext(text).also { cache[b.key] = it; version++ }
@@ -66,9 +92,10 @@ object SecretSession {
     /** Forget all passwords and decrypted text. */
     fun lock() {
         if (passwords.isEmpty() && cache.isEmpty()) return
-        synchronized(passwords) { passwords.forEach { it.fill('\u0000') }; passwords.clear() }
+        synchronized(passwords) { passwords.forEach { it.fill('\u0000') }; passwords.clear(); owner.clear() }
         cache.clear()
         version++
+        onLocked?.invoke()
     }
 
     fun onBackground() {

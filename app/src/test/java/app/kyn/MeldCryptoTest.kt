@@ -178,6 +178,70 @@ class MeldCryptoTest {
         assertEquals("Arzt", withoutExt("Arzt.md"))
     }
 
+    // ---------- writing (v3) ----------
+
+    @Test fun fileRoundTripWithPluginLayout() {
+        val hint = "Tipp \"mit\" \\ / ümlaut\nzweite"
+        val json = MeldCrypto.fileJson(hint, MeldCrypto.encryptV3(note, pass))
+        // same keys, order and indentation as JSON.stringify(FileData, null, 2) in the plugin
+        val keys = Regex("""^\s*"(\w+)":""", RegexOption.MULTILINE).findAll(json).map { it.groupValues[1] }.toList()
+        assertEquals(listOf("version", "hint", "encodedData", "kdf", "name", "hash", "iterations", "salt", "cipher", "name", "keyLength", "iv", "tagLength"), keys)
+        assertTrue(json.startsWith("{\n  \"version\": \"3.0\",\n  \"hint\": "))
+        assertTrue(json.endsWith("\n  }\n}"))
+        val f = MeldCrypto.parseFile(json)
+        assertEquals(hint, f.hint)
+        assertEquals(note, MeldCrypto.decrypt(f.blob!!, pass))
+        assertNull(MeldCrypto.decrypt(f.blob!!, "falsch".toCharArray()))
+    }
+
+    @Test fun freshSaltAndIvEveryTime() {
+        val a = MeldCrypto.encryptV3("x", pass)
+        val b = MeldCrypto.encryptV3("x", pass)
+        assertFalse(a.salt.contentEquals(b.salt))
+        assertFalse(a.iv.contentEquals(b.iv))
+        assertEquals(MeldCrypto.V3_DEFAULT_ITER, a.iterations)
+    }
+
+    @Test fun inlineRoundTripKeepsHintAndVisibility() {
+        val b = MeldCrypto.encryptV3(section, pass)
+        val hidden = MeldCrypto.inlineText(b, "Tipp", hidden = true)
+        val visible = MeldCrypto.inlineText(b, "", hidden = false)
+        assertTrue(hidden.startsWith("%%🔐γ 💡Tipp💡") && hidden.endsWith(" 🔐%%"))
+        assertTrue(visible.startsWith("🔐γ ") && visible.endsWith(" 🔐"))
+        for ((t, h) in listOf(hidden to true, visible to false)) {
+            val i = MeldCrypto.findInline("vor $t nach").single()
+            assertEquals(h, i.hidden)
+            assertEquals(t, i.raw)
+            assertEquals(section, MeldCrypto.decrypt(MeldCrypto.blob(i), pass))
+        }
+    }
+
+    @Test fun writeEncryptedRefusesPlaintext() {
+        val root = tmp.root
+        for (bad in listOf("klartext GEHEIM", """{"version":"3.0","hint":"","encodedData":""}""", "")) {
+            try { Vault.writeEncrypted(root, "a.mdenc", bad); fail(bad) } catch (_: IllegalArgumentException) {}
+        }
+        try { Vault.writeEncrypted(root, "a.md", MeldCrypto.fileJson("", MeldCrypto.encryptV3("x", pass))); fail() } catch (_: IllegalArgumentException) {}
+        assertTrue(root.list()!!.isEmpty())
+    }
+
+    @Test fun savedNoteContainsNoPlaintext() {
+        val root = tmp.root
+        val canary = "GEHEIM-CANARY-${System.nanoTime()}"
+        Vault.writeEncrypted(root, "privat/x.mdenc", MeldCrypto.fileJson("hint", MeldCrypto.encryptV3("text $canary", pass)))
+        val all = root.walk().filter { it.isFile }.toList()
+        assertEquals(listOf("x.mdenc"), all.map { it.name }) // no temp file left
+        assertFalse(all.any { canary in it.readText() })
+        assertEquals("text $canary", MeldCrypto.decrypt(MeldCrypto.parseFile(all[0].readText()).blob!!, pass))
+    }
+
+    /** Writes files for the WebCrypto cross-check (tools: decrypt with the plugin's algorithm in Node). */
+    @Test fun interopSamples() {
+        val dir = File("build/meld-interop").apply { mkdirs() }
+        File(dir, "kyn.mdenc").writeText(MeldCrypto.fileJson("h", MeldCrypto.encryptV3(note, pass)))
+        File(dir, "kyn-inline.txt").writeText(MeldCrypto.inlineText(MeldCrypto.encryptV3(section, pass), "h", true))
+    }
+
     @Test fun plaintextHidesItself() {
         assertEquals("Plaintext(***)", Plaintext("geheim").toString())
     }

@@ -297,6 +297,22 @@ object Vault {
         f.writeText(serialize(front, body))
     }
 
+    /**
+     * The only way to write an encrypted note. [content] must be a Meld Encrypt file with ciphertext,
+     * checked here so plaintext can never end up in a .mdenc. Written to a temp file and renamed,
+     * so an interrupted write never leaves half a ciphertext (that would lose the note).
+     */
+    fun writeEncrypted(root: File, path: String, content: String) {
+        require(MeldCrypto.isEncryptedFile(path)) { "Not an encrypted note: $path" }
+        require(runCatching { MeldCrypto.parseFile(content).blob != null }.getOrDefault(false)) { "Not encrypted content" }
+        val f = File(root, path)
+        if (isLink(f)) error("Not writing through a symlink: $path")
+        f.parentFile?.mkdirs()
+        val tmp = File(f.parentFile, ".${f.name}.tmp")
+        tmp.writeText(content)
+        if (!tmp.renameTo(f)) { tmp.delete(); error("Could not save $path") }
+    }
+
     /** Free path like "inbox/Einkauf.md", "inbox/Einkauf 2.md". */
     fun uniquePath(root: File, folder: String, title: String): String {
         var name = title.replace(Regex("""[\\/:*?"<>|#^\[\]\n]"""), "").trim().take(80)

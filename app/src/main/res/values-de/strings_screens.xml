@@ -136,9 +136,11 @@
     <string name="secret_hint">Hinweis: %1$s</string>
     <string name="secret_wrong">Falsches Passwort</string>
     <string name="secret_unlock">Entsperren</string>
+    <string name="secret_done">Fertig</string>
+    <string name="secret_save">Speichern</string>
+    <string name="secret_save_failed">Speichern fehlgeschlagen: Notiz neu entsperren und nochmal versuchen</string>
     <string name="secret_lock">Sperren</string>
     <string name="secret_locked_note">Diese Notiz ist verschlüsselt (Meld Encrypt).</string>
-    <string name="secret_read_only">Nur lesen · bearbeiten in Obsidian</string>
     <string name="secret_unsupported">Dieses Format kann kyn nicht lesen. Öffne die Notiz einmal in Obsidian, es speichert sie im aktuellen Format.</string>
     <string name="secret_inline_locked">Verschlüsselter Abschnitt · tippen zum Entsperren</string>
     <string name="secret_inline_title">Verschlüsselter Abschnitt</string>

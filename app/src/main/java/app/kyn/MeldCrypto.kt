@@ -17,7 +17,8 @@ import javax.crypto.spec.SecretKeySpec
  * Older formats (inline 🔐α and the first one, file "1.0") are reported as [Unsupported]:
  * open the note once in Obsidian, which rewrites it in the current format.
  *
- * kyn never writes these formats; decrypted text exists only in memory, see [SecretSession].
+ * kyn writes only v3 (like the plugin since 3.0): [encryptV3] with [fileJson] / [inlineText].
+ * Decrypted text exists only in memory, see [SecretSession].
  */
 object MeldCrypto {
     /** File extensions of whole encrypted notes. */
@@ -39,8 +40,11 @@ object MeldCrypto {
     /** Contents of a .mdenc file. The hint is not authenticated: show it, never trust it. */
     class FileData(val hint: String, val blob: Blob?) // blob null = empty file / empty note
 
-    /** One encrypted section inside a note line: `%%🔐γ 💡hint💡base64 🔐%%` (or without %%). */
-    class Inline(val range: IntRange, val hint: String, val version: Char?, val base64: String)
+    /**
+     * One encrypted section inside a note line: `%%🔐γ 💡hint💡base64 🔐%%` (or without %%).
+     * [raw] is the matched text; [hidden] = written with %% (hidden in Obsidian's reading view).
+     */
+    class Inline(val range: IntRange, val hint: String, val version: Char?, val base64: String, val raw: String, val hidden: Boolean)
 
     private const val V2_ITER = 210_000
     const val V3_MIN_ITER = 220_000
@@ -106,8 +110,81 @@ object MeldCrypto {
     fun findInline(line: String): List<Inline> {
         if ("🔐" !in line) return emptyList()
         return INLINE.findAll(line).map { m ->
-            Inline(m.range, m.groupValues[2], m.groupValues[1].firstOrNull(), m.groupValues[3])
+            Inline(m.range, m.groupValues[2], m.groupValues[1].firstOrNull(), m.groupValues[3], m.value, m.value.startsWith("%%"))
         }.toList()
+    }
+
+    // ---------- encryption (v3 only) ----------
+
+    const val V3_DEFAULT_ITER = 220_000
+    private val random = java.security.SecureRandom()
+
+    fun encryptV3(text: String, password: CharArray, iterations: Int = V3_DEFAULT_ITER): V3 {
+        require(password.isNotEmpty()) { "empty password" }
+        val salt = ByteArray(16).also { random.nextBytes(it) }
+        val iv = ByteArray(12).also { random.nextBytes(it) }
+        val header = V3(iterations, salt, iv, ByteArray(16), "")
+        val raw = pbkdf2Sha512(password, salt, iterations)
+        try {
+            val c = Cipher.getInstance("AES/GCM/NoPadding")
+            c.init(Cipher.ENCRYPT_MODE, SecretKeySpec(raw, "AES"), GCMParameterSpec(128, iv))
+            c.updateAAD(aadV3(header))
+            return v3(iterations, salt, iv, c.doFinal(text.toByteArray(Charsets.UTF_8)))
+        } finally {
+            raw.fill(0)
+        }
+    }
+
+    /** .mdenc content exactly as the plugin writes it: `JSON.stringify(FileData, null, 2)`. */
+    fun fileJson(hint: String, b: V3): String = """
+        |{
+        |  "version": "3.0",
+        |  "hint": ${jsonString(hint)},
+        |  "encodedData": "${enc(b.data)}",
+        |  "kdf": {
+        |    "name": "PBKDF2",
+        |    "hash": "SHA-512",
+        |    "iterations": ${b.iterations},
+        |    "salt": "${enc(b.salt)}"
+        |  },
+        |  "cipher": {
+        |    "name": "AES-GCM",
+        |    "keyLength": 256,
+        |    "iv": "${enc(b.iv)}",
+        |    "tagLength": 128
+        |  }
+        |}""".trimMargin()
+
+    /** Compact inline v3 Base64: [1][iterations, 3 bytes][salt 16][iv 12][ciphertext+tag]. */
+    fun encodeInline(b: V3): String {
+        val out = ByteArray(32 + b.data.size)
+        out[0] = 1
+        out[1] = (b.iterations ushr 16).toByte(); out[2] = (b.iterations ushr 8).toByte(); out[3] = b.iterations.toByte()
+        b.salt.copyInto(out, 4); b.iv.copyInto(out, 20); b.data.copyInto(out, 32)
+        return enc(out)
+    }
+
+    /** Inline section as the plugin writes it (γ markers, optional hint), [hidden] = with %%. */
+    fun inlineText(b: V3, hint: String, hidden: Boolean): String {
+        val h = if (hint.isNotEmpty()) "💡$hint💡" else ""
+        return if (hidden) "%%🔐γ $h${encodeInline(b)} 🔐%%" else "🔐γ $h${encodeInline(b)} 🔐"
+    }
+
+    /** JSON string literal like JSON.stringify (no escaping of '/' or non-ASCII). */
+    private fun jsonString(s: String): String = buildString {
+        append('"')
+        for (ch in s) when {
+            ch == '"' -> append("\\\"")
+            ch == '\\' -> append("\\\\")
+            ch == '\n' -> append("\\n")
+            ch == '\r' -> append("\\r")
+            ch == '\t' -> append("\\t")
+            ch == '\b' -> append("\\b")
+            ch == '\u000C' -> append("\\f")
+            ch < ' ' -> append("\\u%04x".format(ch.code))
+            else -> append(ch)
+        }
+        append('"')
     }
 
     // ---------- decryption ----------
