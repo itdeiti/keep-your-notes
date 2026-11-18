@@ -148,8 +148,9 @@
     <string name="secret_hint_invalid">Kein 💡 und kein Zeilenumbruch im Hinweis</string>
     <string name="secret_visible">In Obsidians Leseansicht als 🔐 zeigen</string>
     <string name="secret_no_recovery">Ohne Passwort ist der Inhalt verloren.</string>
-    <string name="secret_history_warning">Frühere Versionen dieser Notiz bleiben unverschlüsselt in der Git-Historie.</string>
+    <string name="secret_history_warning">Frühere Versionen bleiben unverschlüsselt in der Git-Historie.</string>
     <string name="secret_select_first">Erst den Text markieren, der verschlüsselt werden soll</string>
+    <string name="secret_delete_failed">Unverschlüsselte Notiz ließ sich nicht löschen, nichts wurde geändert</string>
     <string name="secret_lock">Sperren</string>
     <string name="secret_locked_note">Diese Notiz ist verschlüsselt (Meld Encrypt).</string>
     <string name="secret_unsupported">Dieses Format kann kyn nicht lesen. Öffne die Notiz einmal in Obsidian, es speichert sie im aktuellen Format.</string>

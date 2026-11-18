@@ -3,6 +3,7 @@ package app.kyn
 
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import androidx.activity.compose.BackHandler
@@ -42,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -127,6 +129,7 @@ private fun SecureTextEditor(initial: String, onChange: (String) -> Unit, modifi
                 background = null
                 setTextColor(color)
                 textSize = size
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
                 setText(initial)
                 doAfterTextChanged { onChange(it?.toString().orEmpty()) }
             }
@@ -204,7 +207,7 @@ fun SecretScreen(vm: AppVM) {
 @Composable
 internal fun SecretLine(
     line: String, blocks: List<MeldCrypto.Inline>, c: MdColors, onLink: (String) -> Unit, modifier: Modifier,
-    onEdit: (suspend (MeldCrypto.Inline, String) -> Boolean)? = null,
+    onEdit: ((MeldCrypto.Inline, String) -> Unit)? = null,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         var pos = 0
@@ -220,14 +223,10 @@ internal fun SecretLine(
 }
 
 @Composable
-private fun SecretBlock(i: MeldCrypto.Inline, c: MdColors, onLink: (String) -> Unit, onEdit: (suspend (MeldCrypto.Inline, String) -> Boolean)?) {
+private fun SecretBlock(i: MeldCrypto.Inline, c: MdColors, onLink: (String) -> Unit, onEdit: ((MeldCrypto.Inline, String) -> Unit)?) {
     val blob = remember(i.base64, i.version) { runCatching { MeldCrypto.blob(i) }.getOrNull() }
     var plain by remember(i.base64) { mutableStateOf<Plaintext?>(null) }
     var ask by remember { mutableStateOf(false) }
-    var edit by remember { mutableStateOf<String?>(null) } // plaintext draft, memory only
-    var saving by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     val version = SecretSession.version
     LaunchedEffect(i.base64, version) {
         plain = blob?.let { SecretSession.cached(it) ?: SecretSession.tryKnown(it) }
@@ -246,39 +245,40 @@ private fun SecretBlock(i: MeldCrypto.Inline, c: MdColors, onLink: (String) -> U
                 )
                 else -> {
                     MarkdownView(p.text, c, onToggle = {}, onEdit = {}, onLink = onLink, modifier = Modifier.fillMaxWidth(), readOnly = true)
-                    if (onEdit != null) TextButton({ edit = p.text; failed = false }, Modifier.align(Alignment.End)) { Text(stringResource(R.string.editor_edit)) }
+                    if (onEdit != null) TextButton({ onEdit(i, p.text) }, Modifier.align(Alignment.End)) { Text(stringResource(R.string.editor_edit)) }
                 }
             }
         }
     }
-    val draft = edit
-    if (draft != null && onEdit != null) AlertDialog(
-        onDismissRequest = { if (!saving) edit = null },
-        title = { Text(stringResource(R.string.secret_inline_title)) },
-        text = {
-            Column {
-                SecureTextEditor(draft, onChange = { edit = it }, Modifier.fillMaxWidth().heightIn(min = 120.dp))
-                if (failed) Text(stringResource(R.string.secret_save_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
-        },
-        confirmButton = {
-            TextButton(enabled = !saving, onClick = {
-                saving = true
-                scope.launch {
-                    val ok = onEdit(i, edit.orEmpty())
-                    saving = false
-                    if (ok) edit = null else failed = true
-                }
-            }) { Text(stringResource(R.string.secret_save)) }
-        },
-        dismissButton = { TextButton({ edit = null }, enabled = !saving) { Text(stringResource(R.string.screens_cancel)) } },
-    )
-    if (ask && blob != null) AlertDialog(
+    // dialogs are own windows: never over the PIN screen
+    if (ask && blob != null && !AppLock.locked) AlertDialog(
         onDismissRequest = { ask = false },
         title = { Text(stringResource(R.string.secret_inline_title)) },
         text = { PasswordInput(i.hint, onSubmit = { pw -> SecretSession.unlock(blob, pw)?.also { plain = it } != null }, onDone = { ask = false }) },
         confirmButton = {},
         dismissButton = { TextButton({ ask = false }) { Text(stringResource(R.string.screens_cancel)) } },
+    )
+}
+
+/**
+ * Edit dialog for an encrypted section. The draft lives in [AppVM.sectionDraft] (memory only): saved when
+ * the app goes to the background, dropped on lock, so it never outlives the session or shows over the PIN.
+ */
+@Composable
+internal fun SectionEditDialog(vm: AppVM) {
+    val draft = vm.sectionDraft ?: return
+    if (AppLock.locked) return
+    AlertDialog(
+        onDismissRequest = { if (!vm.sectionSaving) vm.cancelSection() },
+        title = { Text(stringResource(R.string.secret_inline_title)) },
+        text = {
+            Column {
+                key(vm.sectionKey) { SecureTextEditor(draft, onChange = { vm.sectionDraft = it }, Modifier.fillMaxWidth().heightIn(min = 120.dp)) }
+                if (vm.sectionFailed) Text(stringResource(R.string.secret_save_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = { TextButton(enabled = !vm.sectionSaving, onClick = { vm.saveSection() }) { Text(stringResource(R.string.secret_save)) } },
+        dismissButton = { TextButton({ vm.cancelSection() }, enabled = !vm.sectionSaving) { Text(stringResource(R.string.screens_cancel)) } },
     )
 }
 
@@ -327,7 +327,7 @@ internal fun NewSecretDialog(
                     Text(stringResource(R.string.secret_visible), style = MaterialTheme.typography.bodySmall)
                 }
                 Text(
-                    stringResource(R.string.secret_no_recovery) + if (inline) "" else " " + stringResource(R.string.secret_history_warning),
+                    stringResource(R.string.secret_no_recovery) + " " + stringResource(R.string.secret_history_warning),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary,
                 )
                 if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)

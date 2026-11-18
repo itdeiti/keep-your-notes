@@ -48,7 +48,8 @@ object MeldCrypto {
 
     private const val V2_ITER = 210_000
     const val V3_MIN_ITER = 220_000
-    const val V3_MAX_ITER = 2_000_000
+    /** The plugin accepts up to 2M; 1M keeps a crafted file from costing many seconds per attempt. */
+    const val V3_MAX_ITER = 1_000_000
 
     // ---------- parsing ----------
 
@@ -104,11 +105,17 @@ object MeldCrypto {
         else -> throw Unsupported(i.version?.toString() ?: "0")
     }
 
-    private val INLINE = Regex("""(?:%%)?🔐([αβγ])? (?:💡(.*?)💡)?([A-Za-z0-9+/]+={0,2}) 🔐(?:%%)?""")
+    /**
+     * Bounded on purpose: the hint may not contain markers and is at most [MAX_HINT] chars, so a crafted
+     * line from the synced repo cannot make matching quadratic (it runs while rendering a note).
+     */
+    private const val MAX_HINT = 200
+    private const val MAX_LINE = 200_000
+    private val INLINE = Regex("""(?:%%)?🔐([αβγ])? (?:💡([^💡🔐\n]{0,$MAX_HINT})💡)?([A-Za-z0-9+/]+={0,2}) 🔐(?:%%)?""")
 
     /** Encrypted sections in [line] (ciphertext is Base64, so a section never spans lines). */
     fun findInline(line: String): List<Inline> {
-        if ("🔐" !in line) return emptyList()
+        if ("🔐" !in line || line.length > MAX_LINE) return emptyList()
         return INLINE.findAll(line).map { m ->
             Inline(m.range, m.groupValues[2], m.groupValues[1].firstOrNull(), m.groupValues[3], m.value, m.value.startsWith("%%"))
         }.toList()
@@ -189,18 +196,22 @@ object MeldCrypto {
 
     // ---------- decryption ----------
 
-    /** Plaintext, or null if the password is wrong or the data was changed. */
-    fun decrypt(blob: Blob, password: CharArray): String? = try {
+    /**
+     * Plaintext, or null if the password is wrong or the data was changed.
+     * [cancelled] is polled during key derivation; when it turns true the derivation stops with
+     * [java.util.concurrent.CancellationException] (a left screen does not keep burning CPU).
+     */
+    fun decrypt(blob: Blob, password: CharArray, cancelled: () -> Boolean = { false }): String? = try {
         when (blob) {
-            is V3 -> gcm(password, blob.salt, blob.iterations, blob.iv, blob.data, aadV3(blob))
-            is V2 -> gcm(password, blob.salt, V2_ITER, blob.iv, blob.data, null)
+            is V3 -> gcm(password, blob.salt, blob.iterations, blob.iv, blob.data, aadV3(blob), cancelled)
+            is V2 -> gcm(password, blob.salt, V2_ITER, blob.iv, blob.data, null, cancelled)
         }
     } catch (_: AEADBadTagException) {
         null
     }
 
-    private fun gcm(password: CharArray, salt: ByteArray, iter: Int, iv: ByteArray, data: ByteArray, aad: ByteArray?): String {
-        val raw = pbkdf2Sha512(password, salt, iter)
+    private fun gcm(password: CharArray, salt: ByteArray, iter: Int, iv: ByteArray, data: ByteArray, aad: ByteArray?, cancelled: () -> Boolean): String {
+        val raw = pbkdf2Sha512(password, salt, iter, cancelled)
         try {
             val c = Cipher.getInstance("AES/GCM/NoPadding")
             c.init(Cipher.DECRYPT_MODE, SecretKeySpec(raw, "AES"), GCMParameterSpec(128, iv))
@@ -215,7 +226,7 @@ object MeldCrypto {
      * 32-byte PBKDF2-HMAC-SHA512 key from the UTF-8 bytes of [password], like WebCrypto in the plugin.
      * Done by hand: how a JCA provider turns chars into bytes differs between providers (Android: BouncyCastle).
      */
-    internal fun pbkdf2Sha512(password: CharArray, salt: ByteArray, iter: Int): ByteArray {
+    internal fun pbkdf2Sha512(password: CharArray, salt: ByteArray, iter: Int, cancelled: () -> Boolean = { false }): ByteArray {
         val bb = Charsets.UTF_8.newEncoder().encode(java.nio.CharBuffer.wrap(password))
         val pw = ByteArray(bb.remaining()).also { bb.get(it) }
         bb.clear(); while (bb.hasRemaining()) bb.put(0)
@@ -227,7 +238,8 @@ object MeldCrypto {
             mac.update(byteArrayOf(0, 0, 0, 1)) // block 1 is enough: 64 bytes > 32 needed
             var u = mac.doFinal()
             val t = u.copyOf()
-            repeat(iter - 1) {
+            repeat(iter - 1) { n ->
+                if (n and 0xfff == 0 && cancelled()) throw java.util.concurrent.CancellationException("key derivation cancelled")
                 u = mac.doFinal(u)
                 for (i in t.indices) t[i] = (t[i].toInt() xor u[i].toInt()).toByte()
             }

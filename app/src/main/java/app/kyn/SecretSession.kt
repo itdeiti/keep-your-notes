@@ -2,12 +2,15 @@ package app.kyn
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.WindowManager
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 
 /** Decrypted text. Lives only in memory: not Parcelable/Serializable, and never printed. */
@@ -26,6 +29,8 @@ object SecretSession {
     private val cache = mutableMapOf<String, Plaintext>()
     /** Blob key -> the (session-owned) password that opened it; re-encrypting uses the same one. */
     private val owner = mutableMapOf<String, CharArray>()
+    /** Session password -> blob keys it already failed on: never derive the same (blob, password) twice. */
+    private val failed = java.util.IdentityHashMap<CharArray, MutableSet<String>>()
     private var backgroundAt = 0L
 
     /** Bumped on every change, so Compose re-reads [cached] and [unlocked]. */
@@ -39,11 +44,15 @@ object SecretSession {
     /** Try the passwords of this session (off the main thread: PBKDF2 takes up to a second). */
     suspend fun tryKnown(b: MeldCrypto.Blob): Plaintext? {
         cache[b.key]?.let { return it }
-        val known = synchronized(passwords) { passwords.toList() }
+        val known = synchronized(passwords) { passwords.filter { failed[it]?.contains(b.key) != true } }
         for (p in known) {
             val copy = p.copyOf()
-            val t = try { withContext(Dispatchers.Default) { MeldCrypto.decrypt(b, copy) } } finally { copy.fill('\u0000') } ?: continue
-            if (synchronized(passwords) { p !in passwords }) return null // locked meanwhile
+            val t = try { derive(b, copy) } finally { copy.fill('\u0000') }
+            synchronized(passwords) {
+                if (p !in passwords) return null // locked meanwhile
+                if (t == null) failed.getOrPut(p) { mutableSetOf() } += b.key
+            }
+            if (t == null) continue
             owner[b.key] = p
             return remember(b, t)
         }
@@ -53,7 +62,7 @@ object SecretSession {
     /** Decrypt with a newly typed password; on success it is kept for this session. [password] is wiped. */
     suspend fun unlock(b: MeldCrypto.Blob, password: CharArray): Plaintext? {
         try {
-            val t = withContext(Dispatchers.Default) { MeldCrypto.decrypt(b, password) } ?: return null
+            val t = derive(b, password) ?: return null
             owner[b.key] = synchronized(passwords) {
                 passwords.firstOrNull { it.contentEquals(password) } ?: password.copyOf().also { passwords += it }
             }
@@ -61,6 +70,12 @@ object SecretSession {
         } finally {
             password.fill('\u0000')
         }
+    }
+
+    /** Decrypt off the main thread; stops deriving the key when the calling coroutine is cancelled. */
+    private suspend fun derive(b: MeldCrypto.Blob, password: CharArray): String? = withContext(Dispatchers.Default) {
+        val job = coroutineContext[Job]
+        MeldCrypto.decrypt(b, password) { job?.isActive == false }
     }
 
     /**
@@ -109,18 +124,29 @@ object SecretSession {
     /** Forget all passwords and decrypted text. */
     fun lock() {
         if (passwords.isEmpty() && cache.isEmpty()) return
-        synchronized(passwords) { passwords.forEach { it.fill('\u0000') }; passwords.clear(); owner.clear() }
+        synchronized(passwords) { passwords.forEach { it.fill('\u0000') }; passwords.clear(); owner.clear(); failed.clear() }
         cache.clear()
         version++
         onLocked?.invoke()
     }
 
-    fun onBackground() {
+    private val handler = Handler(Looper.getMainLooper())
+    private val lockLater = Runnable { lock() }
+
+    /**
+     * App left: lock after the PIN delay even if it never comes back to the foreground, so passwords do
+     * not sit in memory for hours. (A frozen process runs this late; [onForeground] checks again.)
+     * Drafts were saved in onStop before this, with the password copied synchronously.
+     */
+    fun onBackground(ctx: Context) {
         backgroundAt = SystemClock.elapsedRealtime()
+        handler.removeCallbacks(lockLater)
+        if (unlocked) handler.postDelayed(lockLater, AppLock.delay(ctx) * 1000L)
     }
 
     /** Back in the app: forget secrets if the PIN lock engaged or the app was away at least the PIN delay. */
     fun onForeground(ctx: Context) {
+        handler.removeCallbacks(lockLater)
         val at = backgroundAt
         backgroundAt = 0
         if (AppLock.locked && AppLock.enabled(ctx)) { lock(); return }

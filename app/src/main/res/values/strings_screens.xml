@@ -164,8 +164,9 @@
     <string name="secret_hint_invalid">No 💡 and no line break in the hint</string>
     <string name="secret_visible">Show as 🔐 in Obsidian\'s reading view</string>
     <string name="secret_no_recovery">Without the password the content is lost.</string>
-    <string name="secret_history_warning">Earlier versions of this note stay unencrypted in the git history.</string>
+    <string name="secret_history_warning">Earlier versions stay unencrypted in the git history.</string>
     <string name="secret_select_first">Select the text to encrypt first</string>
+    <string name="secret_delete_failed">Could not delete the unencrypted note, nothing was changed</string>
     <string name="secret_lock">Lock</string>
     <string name="secret_locked_note">This note is encrypted (Meld Encrypt).</string>
     <string name="secret_unsupported">kyn cannot read this format. Open the note in Obsidian once, it saves it in the current format.</string>
