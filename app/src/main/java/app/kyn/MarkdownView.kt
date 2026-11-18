@@ -72,6 +72,7 @@ private fun MdTable(rows: List<String>, c: MdColors, onTap: () -> Unit, onLink: 
 internal fun MarkdownView(
     body: String, c: MdColors, onToggle: (Int) -> Unit, onEdit: (Int) -> Unit, onLink: (String) -> Unit, modifier: Modifier,
     readOnly: Boolean = false,
+    onEditSecret: (suspend (MeldCrypto.Inline, String) -> Boolean)? = null,
 ) {
     val base = MaterialTheme.typography.bodyLarge
     val lines = body.split("\n")
@@ -98,7 +99,7 @@ internal fun MarkdownView(
           }
           val secrets = MeldCrypto.findInline(line)
           if (secrets.isNotEmpty()) {
-              SecretLine(line, secrets, c, onLink, Modifier.fillMaxWidth().padding(vertical = 4.dp))
+              SecretLine(line, secrets, c, onLink, Modifier.fillMaxWidth().padding(vertical = 4.dp), onEditSecret)
               return@forEachIndexed
           }
           val edit = { onEdit(i) }

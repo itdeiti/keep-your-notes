@@ -1,13 +1,21 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 package app.kyn
 
+import android.text.InputType
+import android.view.Gravity
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import androidx.activity.compose.BackHandler
+import androidx.core.widget.doAfterTextChanged
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -39,7 +47,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -96,7 +106,35 @@ private fun PasswordInput(hint: String, onSubmit: suspend (CharArray) -> Boolean
     }
 }
 
-/** Whole encrypted note (.mdenc), read-only. */
+/**
+ * Multi-line text field for plaintext: a plain EditText, because Compose cannot ask the keyboard for
+ * incognito mode. IME_FLAG_NO_PERSONALIZED_LEARNING keeps Gboard & co. from learning the words;
+ * isSaveEnabled = false keeps the text out of the saved instance state (which can be written to disk).
+ */
+@Composable
+private fun SecureTextEditor(initial: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.onSurface.toArgb()
+    val size = MaterialTheme.typography.bodyLarge.fontSize.value
+    AndroidView(
+        factory = { ctx ->
+            EditText(ctx).apply {
+                isSaveEnabled = false
+                imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                isSingleLine = false
+                gravity = Gravity.TOP or Gravity.START
+                background = null
+                setTextColor(color)
+                textSize = size
+                setText(initial)
+                doAfterTextChanged { onChange(it?.toString().orEmpty()) }
+            }
+        },
+        modifier = modifier,
+    )
+}
+
+/** Whole encrypted note (.mdenc): read view, and editing with the password it was opened with. */
 @Composable
 fun SecretScreen(vm: AppVM) {
     val n = vm.secretNote ?: return
@@ -104,7 +142,8 @@ fun SecretScreen(vm: AppVM) {
     val c = mdColors()
     BackHandler { vm.closeSecret() }
     var file by remember(n.path) { mutableStateOf<Result<MeldCrypto.FileData>?>(null) }
-    LaunchedEffect(n.path) { file = runCatching { vm.secretFile(n) } }
+    LaunchedEffect(n.path, vm.secretRev) { file = runCatching { vm.secretFile(n) } }
+    val editing = vm.secretDraft != null
     var plain by remember(n.path) { mutableStateOf<Plaintext?>(null) }
     val version = SecretSession.version
     LaunchedEffect(file, version) {
@@ -119,11 +158,24 @@ fun SecretScreen(vm: AppVM) {
                 navigationIcon = { IconButton({ vm.closeSecret() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.screens_back)) } },
                 title = { Text("🔐 " + n.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = {
-                    if (SecretSession.unlocked) TextButton({ SecretSession.lock() }) { Text(stringResource(R.string.secret_lock)) }
+                    val blob = file?.getOrNull()?.blob
+                    val p = plain
+                    if (vm.secretSaving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    if (editing) TextButton({ vm.saveSecret { vm.secretDraft = null } }) { Text(stringResource(R.string.secret_done)) }
+                    else if (p != null && blob != null) TextButton({ vm.startSecretEdit(file!!.getOrThrow(), blob, p) }) { Text(stringResource(R.string.editor_edit)) }
+                    if (SecretSession.unlocked) TextButton({ vm.saveSecret { SecretSession.lock() } }) { Text(stringResource(R.string.secret_lock)) }
                 },
             )
         },
     ) { pad ->
+        val draft = vm.secretDraft
+        if (draft != null) {
+            SecureTextEditor(
+                draft, onChange = { vm.secretDraft = it },
+                Modifier.padding(pad).consumeWindowInsets(pad).imePadding().fillMaxSize().padding(horizontal = 12.dp),
+            )
+            return@Scaffold
+        }
         Column(Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             val f = file
             val p = plain
@@ -131,11 +183,10 @@ fun SecretScreen(vm: AppVM) {
                 f == null -> CircularProgressIndicator()
                 f.isFailure -> Text(stringResource(R.string.secret_unsupported))
                 p != null -> {
-                    Text(stringResource(R.string.secret_read_only), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     val body = remember(p) { Vault.parse(p.text).second }
                     MarkdownView(
                         body, c, onToggle = {}, onEdit = {}, onLink = { openLink(ctx, vm, it) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp), readOnly = true,
+                        modifier = Modifier.fillMaxWidth(), readOnly = true,
                     )
                 }
                 else -> {
@@ -150,13 +201,16 @@ fun SecretScreen(vm: AppVM) {
 
 /** A note line with encrypted sections: text around them as is, each section locked or decrypted. */
 @Composable
-internal fun SecretLine(line: String, blocks: List<MeldCrypto.Inline>, c: MdColors, onLink: (String) -> Unit, modifier: Modifier) {
+internal fun SecretLine(
+    line: String, blocks: List<MeldCrypto.Inline>, c: MdColors, onLink: (String) -> Unit, modifier: Modifier,
+    onEdit: (suspend (MeldCrypto.Inline, String) -> Boolean)? = null,
+) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         var pos = 0
         for (b in blocks) {
             val before = line.substring(pos, b.range.first)
             if (before.isNotBlank()) Text(Markdown.render(before.trim(), c), style = MaterialTheme.typography.bodyLarge)
-            SecretBlock(b, c, onLink)
+            SecretBlock(b, c, onLink, onEdit)
             pos = b.range.last + 1
         }
         val after = line.substring(pos)
@@ -165,10 +219,14 @@ internal fun SecretLine(line: String, blocks: List<MeldCrypto.Inline>, c: MdColo
 }
 
 @Composable
-private fun SecretBlock(i: MeldCrypto.Inline, c: MdColors, onLink: (String) -> Unit) {
+private fun SecretBlock(i: MeldCrypto.Inline, c: MdColors, onLink: (String) -> Unit, onEdit: (suspend (MeldCrypto.Inline, String) -> Boolean)?) {
     val blob = remember(i.base64, i.version) { runCatching { MeldCrypto.blob(i) }.getOrNull() }
     var plain by remember(i.base64) { mutableStateOf<Plaintext?>(null) }
     var ask by remember { mutableStateOf(false) }
+    var edit by remember { mutableStateOf<String?>(null) } // plaintext draft, memory only
+    var saving by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val version = SecretSession.version
     LaunchedEffect(i.base64, version) {
         plain = blob?.let { SecretSession.cached(it) ?: SecretSession.tryKnown(it) }
@@ -185,10 +243,35 @@ private fun SecretBlock(i: MeldCrypto.Inline, c: MdColors, onLink: (String) -> U
                     "🔐 " + stringResource(R.string.secret_inline_locked) + (if (i.hint.isNotBlank()) " · 💡 " + i.hint else ""),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary,
                 )
-                else -> MarkdownView(p.text, c, onToggle = {}, onEdit = {}, onLink = onLink, modifier = Modifier.fillMaxWidth(), readOnly = true)
+                else -> {
+                    MarkdownView(p.text, c, onToggle = {}, onEdit = {}, onLink = onLink, modifier = Modifier.fillMaxWidth(), readOnly = true)
+                    if (onEdit != null) TextButton({ edit = p.text; failed = false }, Modifier.align(Alignment.End)) { Text(stringResource(R.string.editor_edit)) }
+                }
             }
         }
     }
+    val draft = edit
+    if (draft != null && onEdit != null) AlertDialog(
+        onDismissRequest = { if (!saving) edit = null },
+        title = { Text(stringResource(R.string.secret_inline_title)) },
+        text = {
+            Column {
+                SecureTextEditor(draft, onChange = { edit = it }, Modifier.fillMaxWidth().heightIn(min = 120.dp))
+                if (failed) Text(stringResource(R.string.secret_save_failed), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !saving, onClick = {
+                saving = true
+                scope.launch {
+                    val ok = onEdit(i, edit.orEmpty())
+                    saving = false
+                    if (ok) edit = null else failed = true
+                }
+            }) { Text(stringResource(R.string.secret_save)) }
+        },
+        dismissButton = { TextButton({ edit = null }, enabled = !saving) { Text(stringResource(R.string.screens_cancel)) } },
+    )
     if (ask && blob != null) AlertDialog(
         onDismissRequest = { ask = false },
         title = { Text(stringResource(R.string.secret_inline_title)) },

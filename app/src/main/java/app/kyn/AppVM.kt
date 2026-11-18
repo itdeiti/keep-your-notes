@@ -2,6 +2,7 @@ package app.kyn
 
 import android.app.Application
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,9 +51,22 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     val edPinned get() = isPinned(edFront)
 
-    /** Encrypted note shown read-only on [Screen.Secret]; its plaintext lives only in [SecretSession]. */
+    /** Encrypted note on [Screen.Secret]; its plaintext lives only in [SecretSession] and [secretDraft]. */
     var secretNote by mutableStateOf<Note?>(null)
         private set
+    /** Plaintext being edited (memory only, never saved state); null = not editing. Dropped on lock. */
+    var secretDraft by mutableStateOf<String?>(null)
+    var secretSaving by mutableStateOf(false)
+        private set
+    /** Bumped after a save, so the screen reloads the (new) ciphertext. */
+    var secretRev by mutableIntStateOf(0)
+        private set
+    private var secretBase: MeldCrypto.Blob? = null
+    private var secretHint = ""
+    private var secretSaved: String? = null
+    private var secretMtime = 0L
+    private val secretLock = Mutex()
+    private val dropDrafts: () -> Unit = { secretDraft = null; secretBase = null; secretSaved = null }
 
     /** Where the editor goes back to. */
     private var returnTo = Screen.List
@@ -63,7 +77,12 @@ class AppVM(app: Application) : AndroidViewModel(app) {
 
     init {
         if (!ready()) screen = Screen.Settings
+        SecretSession.onLocked = dropDrafts
         reload()
+    }
+
+    override fun onCleared() {
+        if (SecretSession.onLocked === dropDrafts) SecretSession.onLocked = null
     }
 
     fun ready() = Prefs.load(ctx).repoUrl.isNotBlank() &&
@@ -368,15 +387,87 @@ class AppVM(app: Application) : AndroidViewModel(app) {
     }
 
     fun closeSecret() {
-        secretNote = null
-        screen = returnTo
+        saveSecret {
+            secretDraft = null
+            secretNote = null
+            screen = returnTo
+            reload()
+        }
     }
 
     /** Ciphertext of an encrypted note; throws [MeldCrypto.Unsupported] for formats kyn cannot read. */
     suspend fun secretFile(n: Note): MeldCrypto.FileData = withContext(Dispatchers.IO) {
         val root = Vault.dir(ctx)
         val f = Vault.safeFile(root, n.path, encrypted = true) ?: throw MeldCrypto.Unsupported("?")
-        MeldCrypto.parseFile(f.readText())
+        val mtime = f.lastModified()
+        MeldCrypto.parseFile(f.readText()).also { if (secretDraft == null) secretMtime = mtime }
+    }
+
+    /** Start editing the open encrypted note, decrypted from [blob] (needs a password of this session). */
+    fun startSecretEdit(file: MeldCrypto.FileData, blob: MeldCrypto.Blob, plain: Plaintext) {
+        secretBase = blob
+        secretHint = file.hint
+        secretSaved = plain.text
+        secretDraft = plain.text
+    }
+
+    /**
+     * Encrypt the draft with the password that opened the note and write it (only ciphertext reaches disk,
+     * see [Vault.writeEncrypted]). If the file changed meanwhile (sync, Obsidian), the draft goes to a
+     * conflict copy next to it. [then] runs on the main thread afterwards, also when nothing changed.
+     */
+    fun saveSecret(then: () -> Unit = {}) {
+        val text = secretDraft
+        val base = secretBase
+        val n = secretNote
+        if (text == null || base == null || n == null || text == secretSaved) { then(); return }
+        viewModelScope.launch {
+            secretLock.withLock {
+                secretSaving = true
+                try {
+                    val b = SecretSession.encryptLike(base, text)
+                    if (b == null) {
+                        Toast.makeText(ctx, ctx.getString(R.string.secret_save_failed), Toast.LENGTH_LONG).show()
+                        return@withLock
+                    }
+                    val root = Vault.dir(ctx)
+                    var path = n.path
+                    val f = File(root, path)
+                    if (secretMtime != 0L && f.exists() && f.lastModified() != secretMtime) {
+                        path = Conflicts.copyPath(path)
+                        Toast.makeText(ctx, ctx.getString(R.string.editor_changed_meanwhile), Toast.LENGTH_LONG).show()
+                    }
+                    withContext(Dispatchers.IO) { Vault.writeEncrypted(root, path, MeldCrypto.fileJson(secretHint, b)) }
+                    secretMtime = File(root, path).lastModified()
+                    secretBase = b
+                    secretSaved = text
+                    if (path != n.path) secretNote = n.copy(path = path, modified = secretMtime)
+                    secretRev++
+                    afterChangeNow(ctx.getString(R.string.commit_note, titleOf(path)))
+                } catch (e: Exception) {
+                    Toast.makeText(ctx, ctx.getString(R.string.secret_save_failed), Toast.LENGTH_LONG).show()
+                    return@withLock
+                } finally {
+                    secretSaving = false
+                }
+            }
+            then()
+        }
+    }
+
+    /**
+     * Replace encrypted section [i] of the open note with [text], encrypted again with the same password
+     * and hint (as v3). Only the new ciphertext goes into the editor text, which is then saved.
+     */
+    suspend fun replaceSection(i: MeldCrypto.Inline, text: String): Boolean {
+        val old = runCatching { MeldCrypto.blob(i) }.getOrNull() ?: return false
+        val b = SecretSession.encryptLike(old, text) ?: return false
+        val body = edBody.text
+        val at = body.indexOf(i.raw)
+        if (at < 0) return false
+        edBody = TextFieldValue(body.replaceRange(at, at + i.raw.length, MeldCrypto.inlineText(b, i.hint, i.hidden)))
+        saveEditor()
+        return true
     }
 
     /** Shared text or link → Markdown note in Clippings/. A bare link loads the whole page. */
